@@ -1,0 +1,16 @@
+name: baseline_expectancy
+seed: 42
+runs: 100
+
+model:
+  p_win: 0.55
+  win_r: 2.0
+  loss_r: -1.0
+  n_trades: 1000
+
+portfolio:
+  initial_capital: 10000
+  risk_per_trade: 0.01
+
+storage:
+  store_trades: false

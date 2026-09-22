@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vectorx
+      POSTGRES_PASSWORD: vectorx
+      POSTGRES_DB: vectorx
+    ports:
+      - "5432:5432"
+    volumes:
+      - vectorx_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  vectorx_postgres_data:
