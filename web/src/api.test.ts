@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  compareExpectancy,
   getEquity,
   getExperiment,
   getResults,
@@ -77,5 +78,27 @@ describe('api client', () => {
     mockFetchOnce(null, false, 404)
 
     await expect(getExperiment(999)).rejects.toThrow('404')
+  })
+
+  it('compareExpectancy posts snake_case fields to the comparison endpoint', async () => {
+    const fetchMock = mockFetchOnce({ estimates: {} })
+
+    await compareExpectancy({
+      monteCarloExperimentId: 1,
+      historicalExperimentId: 2,
+      referenceRiskFraction: 0.01,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/comparisons\/expectancy$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          monte_carlo_experiment_id: 1,
+          historical_experiment_id: 2,
+          reference_risk_fraction: 0.01,
+        }),
+      }),
+    )
   })
 })

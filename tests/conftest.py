@@ -88,5 +88,7 @@ def postgres_engine(postgres_url: str) -> Engine:
 def clean_postgres_engine(postgres_engine: Engine) -> Engine:
     """Truncate all tables before each test so tests don't see each other's rows."""
     with postgres_engine.begin() as conn:
-        conn.exec_driver_sql("TRUNCATE TABLE runs, experiments RESTART IDENTITY CASCADE")
+        conn.exec_driver_sql(
+            "TRUNCATE TABLE runs, experiments, experiment_batches RESTART IDENTITY CASCADE"
+        )
     return postgres_engine

@@ -5,16 +5,18 @@
 immediately after — raw `Trade[]` are never retained here or in storage.
 """
 
+import statistics
 from collections.abc import Sequence
 
 from vectorx.core.errors import EmptyTradesError
-from vectorx.core.types import ExperimentSummary, Metrics
+from vectorx.core.types import ExpectancyComparison, ExperimentSummary, Metrics
 from vectorx.statistics.histogram import compute_histogram_bins
 
 
 def compute_experiment_summary(
     run_metrics: tuple[Metrics, ...],
     all_r_multiples: Sequence[float],
+    expectancy: ExpectancyComparison | None = None,
 ) -> ExperimentSummary:
     """Aggregate per-run metrics into experiment-level statistics."""
     if not run_metrics:
@@ -23,13 +25,7 @@ def compute_experiment_summary(
     total_returns = [metrics.total_return for metrics in run_metrics]
     runs = len(run_metrics)
     mean_total_return = sum(total_returns) / runs
-    sorted_returns = sorted(total_returns)
-    mid = runs // 2
-    median_total_return = (
-        sorted_returns[mid]
-        if runs % 2 == 1
-        else (sorted_returns[mid - 1] + sorted_returns[mid]) / 2.0
-    )
+    median_total_return = statistics.median(total_returns)
     variance = sum((tr - mean_total_return) ** 2 for tr in total_returns) / runs
 
     return ExperimentSummary(
@@ -41,4 +37,5 @@ def compute_experiment_summary(
         p_ruined=sum(1 for metrics in run_metrics if metrics.ruined) / runs,
         total_return_histogram=compute_histogram_bins(total_returns),
         r_multiple_histogram=compute_histogram_bins(all_r_multiples),
+        expectancy=expectancy,
     )

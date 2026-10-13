@@ -1,4 +1,4 @@
-"""Domain error hierarchy for invalid parameters, empty data, and ruin."""
+"""Domain error hierarchy for invalid parameters, empty data, ruin, and market data."""
 
 
 class VectorXError(Exception):
@@ -19,3 +19,12 @@ class PortfolioRuinedError(VectorXError):
 
 class ExperimentTooLargeError(VectorXError):
     """Raised when runs * n_trades exceeds the MVP's pre-flight operation limit."""
+
+
+class InvalidMarketDataError(VectorXError):
+    """Raised when historical market data fails structural or OHLCV validation."""
+
+
+class AnalysisUnavailableError(VectorXError):
+    """Raised when statistical analysis is requested for an experiment with no
+    raw trades stored (i.e. `storage.store_trades=false`, Фаза 18a)."""

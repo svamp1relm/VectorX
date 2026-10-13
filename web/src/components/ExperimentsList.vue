@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { listExperiments } from '../api'
+import { usePreferences } from '../preferences'
 import type { ExperimentSummaryItem } from '../types'
 
 const emit = defineEmits<{ select: [id: number] }>()
+const { t } = usePreferences()
 
 const experiments = ref<ExperimentSummaryItem[]>([])
 const loading = ref(true)
@@ -22,20 +24,20 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1>Experiments</h1>
-    <p v-if="loading">Loading…</p>
+    <h2>{{ t('list.title') }}</h2>
+    <p v-if="loading">{{ t('state.loading') }}</p>
     <p v-else-if="error">{{ error }}</p>
-    <p v-else-if="experiments.length === 0">No experiments yet.</p>
+    <p v-else-if="experiments.length === 0">{{ t('state.noExperiments') }}</p>
     <table v-else>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Seed</th>
-          <th>Runs</th>
-          <th>Status</th>
-          <th>Mean total return</th>
-          <th>P(negative)</th>
-          <th>P(ruined)</th>
+          <th>{{ t('table.name') }}</th>
+          <th>{{ t('table.seed') }}</th>
+          <th>{{ t('table.runs') }}</th>
+          <th>{{ t('table.status') }}</th>
+          <th>{{ t('table.meanReturn') }}</th>
+          <th>{{ t('table.negativeProbability') }}</th>
+          <th>{{ t('table.ruinedProbability') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -48,7 +50,7 @@ onMounted(async () => {
           <td>{{ experiment.name }}</td>
           <td>{{ experiment.seed }}</td>
           <td>{{ experiment.runs }}</td>
-          <td>{{ experiment.status }}</td>
+          <td>{{ t(`status.${experiment.status}`) }}</td>
           <td>{{ experiment.mean_total_return }}</td>
           <td>{{ experiment.p_negative }}</td>
           <td>{{ experiment.p_ruined }}</td>

@@ -11,6 +11,7 @@ const items: ExperimentSummaryItem[] = [
   {
     id: 1,
     name: 'baseline_expectancy',
+    spec_type: 'monte_carlo',
     seed: 42,
     runs: 100,
     status: 'completed',

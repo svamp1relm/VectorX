@@ -104,3 +104,43 @@ def test_rejects_empty_trades():
             loss_r=-1.0,
             ruined=False,
         )
+
+
+def test_expectancy_theoretical_is_none_without_model_parameters():
+    # A historical backtest run has no p_win/win_r/loss_r model to derive a
+    # theoretical expectancy from — compute_metrics must not require them.
+    result = simulate_portfolio(
+        trades=(_trade(0, 2.0), _trade(1, -1.0)),
+        initial_capital=10_000.0,
+        risk_per_trade=0.01,
+    )
+
+    metrics = compute_metrics(
+        trades=result.trades,
+        equity_curve=result.equity_curve,
+        initial_capital=10_000.0,
+        ruined=result.ruined,
+    )
+
+    assert metrics.expectancy_theoretical is None
+    assert metrics.expectancy_sample == pytest.approx(0.5)
+
+
+def test_expectancy_theoretical_is_still_computed_when_model_parameters_given():
+    result = simulate_portfolio(
+        trades=(_trade(0, 2.0), _trade(1, -1.0)),
+        initial_capital=10_000.0,
+        risk_per_trade=0.01,
+    )
+
+    metrics = compute_metrics(
+        trades=result.trades,
+        equity_curve=result.equity_curve,
+        initial_capital=10_000.0,
+        p_win=0.5,
+        win_r=2.0,
+        loss_r=-1.0,
+        ruined=result.ruined,
+    )
+
+    assert metrics.expectancy_theoretical == pytest.approx(0.5)

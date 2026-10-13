@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: vectorx
       POSTGRES_DB: vectorx
     ports:
-      - "5432:5432"
+      - "${VECTORX_POSTGRES_PORT:-5432}:5432"
     volumes:
       - vectorx_postgres_data:/var/lib/postgresql/data
 

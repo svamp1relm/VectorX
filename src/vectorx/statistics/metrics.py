@@ -2,9 +2,9 @@
 
 Consumes data only — no YAML, no Postgres, no HTTP. `trades` must already be
 sized by `vectorx.simulation.portfolio.simulate_portfolio` (i.e. `pnl_money`
-is populated), and model parameters (`p_win`/`win_r`/`loss_r`) come from the
-same spec that produced the trades, so `expectancy_theoretical` reflects the
-model rather than the sample.
+is populated). `p_win`/`win_r`/`loss_r` are the Monte Carlo model's
+parameters and are optional: a historical backtest run has no such model, so
+`expectancy_theoretical` is `None` unless all three are given.
 """
 
 from vectorx.core.errors import EmptyTradesError
@@ -16,14 +16,19 @@ def compute_metrics(
     trades: tuple[Trade, ...],
     equity_curve: tuple[EquityPoint, ...],
     initial_capital: float,
-    p_win: float,
-    win_r: float,
-    loss_r: float,
     ruined: bool,
+    p_win: float | None = None,
+    win_r: float | None = None,
+    loss_r: float | None = None,
 ) -> Metrics:
     """Compute per-run statistics. `ruined` is passed through from the portfolio."""
     if not trades:
         raise EmptyTradesError("compute_metrics requires at least one trade")
+
+    if p_win is not None and win_r is not None and loss_r is not None:
+        expectancy_theo = expectancy_theoretical(p_win=p_win, win_r=win_r, loss_r=loss_r)
+    else:
+        expectancy_theo = None
 
     r_multiples = [trade.r_multiple for trade in trades]
     money_pnls = [trade.pnl_money for trade in trades]
@@ -48,7 +53,7 @@ def compute_metrics(
         win_rate=len(wins_r) / len(trades),
         avg_win=(sum(wins_r) / len(wins_r)) if wins_r else 0.0,
         avg_loss=(sum(losses_r) / len(losses_r)) if losses_r else 0.0,
-        expectancy_theoretical=expectancy_theoretical(p_win=p_win, win_r=win_r, loss_r=loss_r),
+        expectancy_theoretical=expectancy_theo,
         expectancy_sample=expectancy_sample(r_multiples),
         total_return=(equity_end - initial_capital) / initial_capital,
         avg_trade=sum(money_pnls) / len(money_pnls),

@@ -78,6 +78,8 @@ def simulate_portfolio(
 
         sized_trades.append(replace(trade, size=risk_amount, pnl_money=pnl_money))
         peak = max(peak, equity)
+        # Not clamped to 1.0: equity is allowed to go negative on ruin (see
+        # the docstring above), so drawdown can legitimately exceed 100%.
         drawdown = (peak - equity) / peak
         equity_curve.append(
             EquityPoint(index=len(equity_curve), equity=equity, drawdown=drawdown)
