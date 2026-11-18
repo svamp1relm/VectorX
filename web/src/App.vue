@@ -49,16 +49,16 @@ function showRobustness() {
       </div>
       <nav class="preference-control" data-testid="view-switch">
         <div class="segmented-control">
-          <button type="button" :class="{ active: view === 'experiments' }" @click="showExperiments">
+          <button type="button" :aria-pressed="view === 'experiments'" :class="{ active: view === 'experiments' }" @click="showExperiments">
             {{ t('list.title') }}
           </button>
-          <button type="button" :class="{ active: view === 'batches' }" @click="showBatches">
+          <button type="button" :aria-pressed="view === 'batches'" :class="{ active: view === 'batches' }" @click="showBatches">
             {{ t('batches.title') }}
           </button>
-          <button type="button" :class="{ active: view === 'out-of-sample' }" @click="showOutOfSample">
+          <button type="button" :aria-pressed="view === 'out-of-sample'" :class="{ active: view === 'out-of-sample' }" @click="showOutOfSample">
             {{ t('oos.title') }}
           </button>
-          <button type="button" :class="{ active: view === 'robustness' }" @click="showRobustness">
+          <button type="button" :aria-pressed="view === 'robustness'" :class="{ active: view === 'robustness' }" @click="showRobustness">
             {{ t('robustness.title') }}
           </button>
         </div>

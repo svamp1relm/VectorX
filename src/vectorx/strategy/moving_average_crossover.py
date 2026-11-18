@@ -9,7 +9,7 @@ this strategy's — it never opens short positions itself.
 """
 
 from collections import deque
-from collections.abc import Iterable
+from math import isfinite
 
 from vectorx.core.errors import InvalidModelParametersError
 from vectorx.marketdata.types import MarketCandle
@@ -32,22 +32,34 @@ class MovingAverageCrossoverStrategy:
             raise InvalidModelParametersError(
                 f"fast_period ({fast_period}) must be < slow_period ({slow_period})"
             )
+        if not isfinite(stop_loss_pct):
+            raise InvalidModelParametersError("stop_loss_pct must be finite")
         if stop_loss_pct <= 0.0:
             raise InvalidModelParametersError(f"stop_loss_pct must be > 0, got {stop_loss_pct}")
         self._fast_period = fast_period
         self._slow_period = slow_period
         self.stop_loss_pct = stop_loss_pct
         self._closes: deque[float] = deque(maxlen=slow_period)
+        self._fast_closes: deque[float] = deque(maxlen=fast_period)
+        self._slow_sum = 0.0
+        self._fast_sum = 0.0
         self._previous_diff: float | None = None
 
     def on_candle(self, candle: MarketCandle) -> Signal:
+        if len(self._closes) == self._slow_period:
+            self._slow_sum -= self._closes[0]
         self._closes.append(candle.close)
+        self._slow_sum += candle.close
+        if len(self._fast_closes) == self._fast_period:
+            self._fast_sum -= self._fast_closes[0]
+        self._fast_closes.append(candle.close)
+        self._fast_sum += candle.close
 
         if len(self._closes) < self._slow_period:
             return Signal.HOLD
 
-        fast_sma = _sma(list(self._closes)[-self._fast_period :])
-        slow_sma = _sma(self._closes)
+        fast_sma = self._fast_sum / self._fast_period
+        slow_sma = self._slow_sum / self._slow_period
         diff = fast_sma - slow_sma
 
         signal = Signal.HOLD
@@ -59,8 +71,3 @@ class MovingAverageCrossoverStrategy:
 
         self._previous_diff = diff
         return signal
-
-
-def _sma(values: Iterable[float]) -> float:
-    values = list(values)
-    return sum(values) / len(values)

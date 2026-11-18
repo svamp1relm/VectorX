@@ -124,6 +124,7 @@ export function getBlockBootstrap(
     seed: String(payload.seed),
     confidence: String(payload.confidence),
     n_resamples: String(payload.nResamples),
+    cost_basis: payload.costBasis ?? 'gross_r',
   })
   return getJson<BlockBootstrapResult>(
     `/experiments/${id}/robustness/block-bootstrap?${query}`,

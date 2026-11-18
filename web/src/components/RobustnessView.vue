@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { getBlockBootstrap, getExperiment, runSensitivity, runWalkForward } from '../api'
 import { usePreferences } from '../preferences'
 import type {
@@ -34,6 +34,20 @@ const blockResamples = ref(2000)
 const blockBootstrapLoading = ref(false)
 const blockBootstrapError = ref<string | null>(null)
 const blockBootstrapResult = ref<BlockBootstrapResult | null>(null)
+const blockCostBasis = ref<'gross_r' | 'net_r'>('gross_r')
+
+const analysisRunning = computed(
+  () => sensitivityLoading.value || walkForwardLoading.value || blockBootstrapLoading.value,
+)
+
+watch(baseExperimentId, () => {
+  sensitivityResult.value = null
+  sensitivityError.value = null
+  walkForwardResult.value = null
+  walkForwardError.value = null
+  blockBootstrapResult.value = null
+  blockBootstrapError.value = null
+})
 
 const sensitivityParamKeys = computed(() => [
   ...new Set(
@@ -56,8 +70,8 @@ function formatParam(value: unknown): string {
   return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)
 }
 
-function estimateValue(estimate: ExpectancyEstimateLite): number {
-  return estimate.canonical_value ?? estimate.value
+function estimateValue(estimate: ExpectancyEstimateLite | null): number | string {
+  return estimate === null ? '—' : estimate.canonical_value ?? estimate.value
 }
 
 async function runSensitivityAnalysis() {
@@ -70,7 +84,7 @@ async function runSensitivityAnalysis() {
       typeof parsed !== 'object' ||
       parsed === null ||
       Array.isArray(parsed) ||
-      Object.values(parsed).some((values) => !Array.isArray(values))
+      Object.values(parsed).some((values) => !Array.isArray(values) || values.length === 0)
     ) {
       throw new Error(t('robustness.invalidGridError'))
     }
@@ -95,7 +109,13 @@ async function runWalkForwardAnalysis() {
   walkForwardResult.value = null
   try {
     const id = requireBaseExperimentId()
-    if (!walkStart.value || !walkEnd.value) {
+    if (
+      !walkStart.value ||
+      !walkEnd.value ||
+      trainWindowDays.value <= 0 ||
+      testWindowDays.value <= 0 ||
+      stepDays.value <= 0
+    ) {
       throw new Error(t('robustness.missingWalkForwardFieldsError'))
     }
     walkForwardLoading.value = true
@@ -124,12 +144,23 @@ async function runBlockBootstrap() {
   blockBootstrapResult.value = null
   try {
     const id = requireBaseExperimentId()
+    if (
+      blockSize.value <= 0 ||
+      blockSeed.value < 0 ||
+      blockConfidence.value <= 0 ||
+      blockConfidence.value >= 1 ||
+      blockResamples.value <= 0 ||
+      blockResamples.value > 20000
+    ) {
+      throw new Error(t('robustness.invalidBootstrapFieldsError'))
+    }
     blockBootstrapLoading.value = true
     blockBootstrapResult.value = await getBlockBootstrap(id, {
       blockSize: blockSize.value,
       seed: blockSeed.value,
       confidence: blockConfidence.value,
       nResamples: blockResamples.value,
+      costBasis: blockCostBasis.value,
     })
   } catch (error) {
     blockBootstrapError.value = errorMessage(error)
@@ -147,7 +178,7 @@ async function runBlockBootstrap() {
     <div class="comparison-controls">
       <label>
         <span>{{ t('oos.baseExperimentId') }}</span>
-        <input v-model.number="baseExperimentId" type="number" data-testid="robustness-base-id" />
+        <input v-model.number="baseExperimentId" type="number" :disabled="analysisRunning" data-testid="robustness-base-id" />
       </label>
     </div>
 
@@ -172,28 +203,35 @@ async function runBlockBootstrap() {
           {{ t('robustness.run') }}
         </button>
       </div>
-      <p v-if="sensitivityLoading">{{ t('state.loading') }}</p>
+      <p v-if="sensitivityLoading" role="status">{{ t('state.loading') }}</p>
       <p v-else-if="sensitivityError" role="alert">{{ sensitivityError }}</p>
-      <table v-else-if="sensitivityResult">
-        <thead>
-          <tr>
-            <th v-for="key in sensitivityParamKeys" :key="key">{{ key }}</th>
-            <th>{{ t('robustness.expectancy') }}</th>
-            <th>{{ t('detail.sharpe') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(point, index) in sensitivityResult.points"
-            :key="index"
-            data-testid="sensitivity-row"
-          >
-            <td v-for="key in sensitivityParamKeys" :key="key">{{ formatParam(point.params[key]) }}</td>
-            <td>{{ point.expectancy_sample }}</td>
-            <td>{{ point.sharpe }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-else-if="sensitivityResult">
+        <p v-if="sensitivityResult.points.length === 0">{{ t('robustness.noSensitivityPoints') }}</p>
+        <table v-else>
+          <thead>
+            <tr>
+              <th v-for="key in sensitivityParamKeys" :key="key">{{ key }}</th>
+              <th>{{ t('robustness.expectancy') }}</th>
+              <th>{{ t('detail.sharpe') }}</th>
+              <th>{{ t('robustness.expectancyNet') }}</th>
+              <th>{{ t('detail.sharpeNet') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(point, index) in sensitivityResult.points"
+              :key="index"
+              data-testid="sensitivity-row"
+            >
+              <td v-for="key in sensitivityParamKeys" :key="key">{{ formatParam(point.params[key]) }}</td>
+              <td>{{ point.expectancy_sample ?? '—' }}</td>
+              <td>{{ point.sharpe ?? '—' }}</td>
+              <td>{{ point.expectancy_sample_net ?? '—' }}</td>
+              <td>{{ point.sharpe_net ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
     </section>
 
     <section>
@@ -209,15 +247,15 @@ async function runBlockBootstrap() {
         </label>
         <label>
           <span>{{ t('robustness.trainDays') }}</span>
-          <input v-model.number="trainWindowDays" type="number" min="0" data-testid="walk-forward-train-days" />
+          <input v-model.number="trainWindowDays" type="number" min="0.000001" data-testid="walk-forward-train-days" />
         </label>
         <label>
           <span>{{ t('robustness.testDays') }}</span>
-          <input v-model.number="testWindowDays" type="number" min="0" data-testid="walk-forward-test-days" />
+          <input v-model.number="testWindowDays" type="number" min="0.000001" data-testid="walk-forward-test-days" />
         </label>
         <label>
           <span>{{ t('robustness.stepDays') }}</span>
-          <input v-model.number="stepDays" type="number" min="0" data-testid="walk-forward-step-days" />
+          <input v-model.number="stepDays" type="number" min="0.000001" data-testid="walk-forward-step-days" />
         </label>
         <button
           type="button"
@@ -252,7 +290,7 @@ async function runBlockBootstrap() {
             <td>{{ item.window.test_end }}</td>
             <td>{{ estimateValue(item.result.comparison.train) }}</td>
             <td>{{ estimateValue(item.result.comparison.test) }}</td>
-            <td>{{ item.result.comparison.delta_train_test }}</td>
+            <td>{{ item.result.comparison.delta_train_test ?? '—' }}</td>
           </tr>
         </tbody>
       </table>
@@ -268,15 +306,22 @@ async function runBlockBootstrap() {
         </label>
         <label>
           <span>{{ t('detail.seed') }}</span>
-          <input v-model.number="blockSeed" type="number" data-testid="block-seed" />
+          <input v-model.number="blockSeed" type="number" min="0" data-testid="block-seed" />
         </label>
         <label>
           <span>{{ t('robustness.confidence') }}</span>
-          <input v-model.number="blockConfidence" type="number" min="0" max="1" step="0.01" data-testid="block-confidence" />
+          <input v-model.number="blockConfidence" type="number" min="0.000001" max="0.999999" step="0.01" data-testid="block-confidence" />
         </label>
         <label>
           <span>{{ t('robustness.resamples') }}</span>
           <input v-model.number="blockResamples" type="number" min="1" max="20000" data-testid="block-resamples" />
+        </label>
+        <label>
+          <span>{{ t('robustness.costBasis') }}</span>
+          <select v-model="blockCostBasis" data-testid="block-cost-basis">
+            <option value="gross_r">gross_r</option>
+            <option value="net_r">net_r</option>
+          </select>
         </label>
         <button
           type="button"
@@ -290,6 +335,8 @@ async function runBlockBootstrap() {
       <p v-if="blockBootstrapLoading">{{ t('state.loading') }}</p>
       <p v-else-if="blockBootstrapError" role="alert">{{ blockBootstrapError }}</p>
       <dl v-else-if="blockBootstrapResult" data-testid="block-bootstrap-result">
+        <dt>{{ t('robustness.costBasis') }}</dt>
+        <dd>{{ blockBootstrapResult.cost_basis ?? 'gross_r' }}</dd>
         <dt>{{ t('robustness.pointEstimate') }}</dt>
         <dd>{{ blockBootstrapResult.confidence_interval.point_estimate }}</dd>
         <dt>{{ t('robustness.lowerBound') }}</dt>

@@ -34,6 +34,7 @@ class Trade:
     pnl: float | None = None
     size: float | None = None
     pnl_money: float | None = None
+    net_r_multiple: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +117,8 @@ class OutOfSampleComparisonResult:
     estimates from disjoint time windows of the same spec.
     """
 
-    train: ExpectancyEstimate
-    test: ExpectancyEstimate
+    train: ExpectancyEstimate | None
+    test: ExpectancyEstimate | None
     risk_compatibility: RiskCompatibility
     delta_train_test: float | None
     warnings: tuple[str, ...] = ()
@@ -130,18 +131,21 @@ class Metrics:
     trades: int
     wins: int
     losses: int
-    win_rate: float
-    avg_win: float
-    avg_loss: float
+    win_rate: float | None
+    avg_win: float | None
+    avg_loss: float | None
     expectancy_theoretical: float | None
-    expectancy_sample: float
+    expectancy_sample: float | None
     total_return: float
-    avg_trade: float
-    variance: float
-    stdev: float
+    avg_trade: float | None
+    variance: float | None
+    stdev: float | None
     max_drawdown: float
-    profit_factor: float
+    profit_factor: float | None
     ruined: bool
+    expectancy_sample_net: float | None = None
+    win_rate_net: float | None = None
+    profit_factor_net: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

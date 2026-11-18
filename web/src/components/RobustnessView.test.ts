@@ -184,7 +184,7 @@ describe('RobustnessView', () => {
     await flushPromises()
 
     expect(getBlockBootstrap).toHaveBeenCalledWith(26, {
-      blockSize: 20, seed: 0, confidence: 0.95, nResamples: 2000,
+      blockSize: 20, seed: 0, confidence: 0.95, nResamples: 2000, costBasis: 'gross_r',
     })
     const result = wrapper.get('[data-testid="block-bootstrap-result"]')
     expect(result.text()).toContain('0.15')

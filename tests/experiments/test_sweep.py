@@ -8,7 +8,7 @@ in `vectorx.experiments.runner`).
 
 import pytest
 
-from vectorx.core.errors import ExperimentTooLargeError
+from vectorx.core.errors import ExperimentTooLargeError, InvalidModelParametersError
 from vectorx.experiments.spec import HistoricalBacktestExperimentSpec, MonteCarloExperimentSpec
 from vectorx.experiments.sweep import MAX_BATCH_EXPERIMENTS, SweepSpec, generate_sweep_specs
 
@@ -74,6 +74,40 @@ def test_resource_guard_blocks_before_generating():
         base=_MC_BASE,
         grid={"seed": list(range(MAX_BATCH_EXPERIMENTS + 1))},
     )
+
+    with pytest.raises(ExperimentTooLargeError):
+        generate_sweep_specs(sweep)
+
+
+def test_huge_grid_is_rejected_before_product_is_called(monkeypatch):
+    import vectorx.experiments.sweep as sweep_module
+
+    def fail_if_called(*_args):
+        raise AssertionError("product must not be constructed for an oversized grid")
+
+    monkeypatch.setattr(sweep_module, "product", fail_if_called)
+    sweep = SweepSpec(
+        hypothesis="too big",
+        base=_MC_BASE,
+        grid={f"seed_{index}": [1, 2] for index in range(10)} | {"seed": list(range(10))},
+    )
+
+    with pytest.raises(ExperimentTooLargeError):
+        generate_sweep_specs(sweep)
+
+
+def test_empty_grid_values_are_rejected():
+    sweep = SweepSpec(hypothesis="empty", base=_MC_BASE, grid={"seed": []})
+
+    with pytest.raises(InvalidModelParametersError):
+        generate_sweep_specs(sweep)
+
+
+def test_aggregate_monte_carlo_operation_budget(monkeypatch):
+    import vectorx.experiments.sweep as sweep_module
+
+    monkeypatch.setattr(sweep_module, "MAX_BATCH_OPERATIONS", 100)
+    sweep = SweepSpec(hypothesis="too much work", base=_MC_BASE, grid={"seed": [1, 2]})
 
     with pytest.raises(ExperimentTooLargeError):
         generate_sweep_specs(sweep)

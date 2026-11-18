@@ -75,6 +75,19 @@ def test_rejects_non_positive_windows_or_step():
         )
 
 
+def test_rejects_more_than_100_windows_during_preflight():
+    from vectorx.core.errors import ExperimentTooLargeError
+
+    with pytest.raises(ExperimentTooLargeError):
+        generate_walk_forward_windows(
+            start=_START,
+            end=_START + timedelta(days=365),
+            train_window=timedelta(hours=1),
+            test_window=timedelta(hours=1),
+            step=timedelta(microseconds=1),
+        )
+
+
 def test_run_walk_forward_produces_one_oos_result_per_window(tmp_path):
     closes = [100.0 + i for i in range(60)]
     csv_path = _write_csv(tmp_path, closes)

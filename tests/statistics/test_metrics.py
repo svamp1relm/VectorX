@@ -7,8 +7,7 @@ test exercises the same data shape `compute_metrics` sees in production
 
 import pytest
 
-from vectorx.core.errors import EmptyTradesError
-from vectorx.core.types import Trade
+from vectorx.core.types import EquityPoint, Trade
 from vectorx.simulation.portfolio import simulate_portfolio
 from vectorx.statistics.metrics import compute_metrics
 
@@ -93,17 +92,41 @@ def test_no_winning_trades_gives_zero_profit_factor_and_zero_avg_win():
     assert metrics.profit_factor == 0.0
 
 
-def test_rejects_empty_trades():
-    with pytest.raises(EmptyTradesError):
-        compute_metrics(
-            trades=(),
-            equity_curve=(),
-            initial_capital=10_000.0,
-            p_win=0.5,
-            win_r=2.0,
-            loss_r=-1.0,
-            ruined=False,
-        )
+def test_empty_trades_return_zero_return_and_unavailable_trade_metrics():
+    curve = (EquityPoint(index=0, equity=10_000.0, drawdown=0.0),)
+
+    result = compute_metrics(trades=(), equity_curve=curve, initial_capital=10_000.0, ruined=False)
+
+    assert result.trades == 0
+    assert result.total_return == 0.0
+    assert result.max_drawdown == 0.0
+    assert result.expectancy_sample is None
+    assert result.win_rate is None
+    assert result.profit_factor is None
+
+
+def test_gross_and_net_metrics_are_separate_when_costs_are_present():
+    portfolio = simulate_portfolio(
+        trades=(_trade(0, 0.1),),
+        initial_capital=10_000.0,
+        risk_per_trade=0.01,
+        commission_r=0.15,
+        slippage_r=0.05,
+    )
+
+    metrics = compute_metrics(
+        trades=portfolio.trades,
+        equity_curve=portfolio.equity_curve,
+        initial_capital=10_000.0,
+        ruined=portfolio.ruined,
+    )
+
+    assert metrics.expectancy_sample == pytest.approx(0.1)
+    assert metrics.win_rate == 1.0
+    assert metrics.expectancy_sample_net == pytest.approx(-0.1)
+    assert metrics.win_rate_net == 0.0
+    assert metrics.profit_factor_net == 0.0
+    assert portfolio.trades[0].net_r_multiple == pytest.approx(-0.1)
 
 
 def test_expectancy_theoretical_is_none_without_model_parameters():

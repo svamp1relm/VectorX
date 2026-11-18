@@ -51,7 +51,7 @@ def build_expectancy_snapshot(
     if not run_metrics:
         raise EmptyTradesError("build_expectancy_snapshot requires at least one run")
     if not all_r_multiples:
-        raise EmptyTradesError("build_expectancy_snapshot requires at least one trade")
+        return ExpectancyComparison()
 
     risk_definition = risk_definition_for_spec(spec)
     sample_size = len(all_r_multiples)
@@ -102,8 +102,10 @@ def build_expectancy_snapshot_from_run_metrics(
         raise EmptyTradesError("build_expectancy_snapshot requires at least one run")
     sample_size = sum(metrics.trades for metrics in run_metrics)
     if sample_size == 0:
-        raise EmptyTradesError("build_expectancy_snapshot requires at least one trade")
-    pooled_sample = sum(metrics.expectancy_sample * metrics.trades for metrics in run_metrics)
+        return ExpectancyComparison()
+    pooled_sample = sum(
+        (metrics.expectancy_sample or 0.0) * metrics.trades for metrics in run_metrics
+    )
     pooled_sample /= sample_size
 
     risk_definition = risk_definition_for_spec(spec)
@@ -270,8 +272,8 @@ def _delta(first: ExpectancyEstimate | None, second: ExpectancyEstimate | None) 
 
 
 def compare_train_test_expectancy(
-    train: ExpectancyEstimate,
-    test: ExpectancyEstimate,
+    train: ExpectancyEstimate | None,
+    test: ExpectancyEstimate | None,
     reference_risk_fraction: float = CANONICAL_RISK_FRACTION,
 ) -> OutOfSampleComparisonResult:
     """Compare two historical-backtest expectancy estimates from disjoint time
@@ -281,6 +283,20 @@ def compare_train_test_expectancy(
     check and canonicalization, generalized from фиксированных "theoretical/
     sample vs historical" source roles to two arbitrary same-kind estimates.
     """
+    if train is None or test is None:
+        return OutOfSampleComparisonResult(
+            train=train,
+            test=test,
+            risk_compatibility=RiskCompatibility(
+                compatible=False,
+                same_risk_definition=False,
+                reference_risk_fraction=reference_risk_fraction,
+                mismatches=("insufficient_trades",),
+            ),
+            delta_train_test=None,
+            warnings=("insufficient_trades",),
+        )
+
     compatibility = _risk_compatibility(
         [train.risk_definition, test.risk_definition], reference_risk_fraction
     )

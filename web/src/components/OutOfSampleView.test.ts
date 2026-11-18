@@ -95,6 +95,17 @@ describe('OutOfSampleView', () => {
     expect(wrapper.text()).toContain('historical_backtest')
   })
 
+  it('shows a validation error when base experiment id is missing', async () => {
+    getExperiment.mockClear()
+    const wrapper = mount(OutOfSampleView)
+
+    await wrapper.get('[data-testid="oos-run-button"]').trigger('click')
+    await flushPromises()
+
+    expect(getExperiment).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Enter a base experiment id')
+  })
+
   it('shows a validation error when dates are missing', async () => {
     getExperiment.mockClear()
     const wrapper = mount(OutOfSampleView)

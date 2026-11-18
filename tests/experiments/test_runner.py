@@ -126,6 +126,18 @@ def test_operations_limit_raises_before_running():
         run_experiment(spec)
 
 
+def test_runs_limit_raises_before_running():
+    from vectorx.experiments.runner import MAX_MONTE_CARLO_RUNS
+
+    spec = _spec(
+        runs=MAX_MONTE_CARLO_RUNS + 1,
+        model={"p_win": 0.5, "win_r": 2.0, "loss_r": -1.0, "n_trades": 1},
+    )
+
+    with pytest.raises(ExperimentTooLargeError):
+        run_experiment(spec)
+
+
 def test_logs_start_and_end_at_info_without_per_run_debug_spam(caplog):
     caplog.set_level(logging.DEBUG)
 
@@ -268,3 +280,19 @@ def test_random_entry_benchmark_strategy_diverges_for_different_seed(tmp_path):
     result_b = run_experiment(_historical_spec(csv_path, seed=2, strategy=strategy))
 
     assert result_a.run_results != result_b.run_results
+
+
+def test_historical_experiment_without_trades_returns_empty_result(tmp_path):
+    csv_path = _write_csv(tmp_path, [100.0, 100.0])
+    spec = _historical_spec(csv_path)
+
+    result = run_experiment(spec)
+
+    metrics = result.run_results[0].metrics
+    assert metrics.trades == 0
+    assert metrics.total_return == 0.0
+    assert metrics.expectancy_sample is None
+    assert result.run_results[0].equity_curve[0].equity == 10_000.0
+    assert result.summary.r_multiple_histogram.edges == ()
+    assert result.summary.r_multiple_histogram.counts == ()
+    assert result.summary.expectancy.historical is None

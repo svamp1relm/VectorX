@@ -6,12 +6,12 @@ with real market data here, `size`/`pnl_money` stay `None` until
 `vectorx.simulation.portfolio.simulate_portfolio` sizes them — that function
 is reused unchanged.
 
-Position management (long/flat only, no pyramiding, no short) is this
-engine's responsibility, not the strategy's: a `BUY` while already in a
-position is ignored, and a `SELL` with no open position is ignored (see
-`vectorx.strategy.protocol.Strategy`'s docstring). A position still open when
-the data ends is force-closed at the last candle's close so no open trade is
-silently dropped.
+Signals are calculated on candle `t` and executed at candle `t+1`'s open,
+so execution never uses a price that was unavailable when the signal formed.
+A signal on the final candle remains unexecuted. Position management (long/flat
+only, no pyramiding, no short) is this engine's responsibility, not the
+strategy's. A position still open when the data ends is force-closed at the
+last candle's close so no open trade is silently dropped.
 
 `r_multiple` is derived from real prices via the strategy's own
 `stop_loss_pct`: `(exit_price - entry_price) / (entry_price * stop_loss_pct)`.
@@ -34,22 +34,40 @@ class _OpenPosition:
     entry_price: float
 
 
-def run_historical_backtest(market_data: MarketData, strategy: Strategy) -> tuple[Trade, ...]:
-    """Replay `market_data.candles` through `strategy`, one candle at a time."""
+def run_historical_backtest(
+    market_data: MarketData,
+    strategy: Strategy,
+    *,
+    trade_start: datetime | None = None,
+) -> tuple[Trade, ...]:
+    """Replay candles, optionally using earlier candles only as indicator warm-up."""
     trades: list[Trade] = []
     position: _OpenPosition | None = None
 
+    pending_signal = Signal.HOLD
     for candle in market_data.candles:
-        signal = strategy.on_candle(candle)
-
-        if position is None:
-            if signal == Signal.BUY:
-                position = _OpenPosition(entry_ts=candle.timestamp, entry_price=candle.close)
-        elif signal == Signal.SELL:
+        if trade_start is not None and candle.timestamp < trade_start:
+            strategy.on_candle(candle)
+            continue
+        if trade_start is not None:
+            reset_position = getattr(strategy, "reset_position", None)
+            if reset_position is not None:
+                reset_position()
+            trade_start = None
+        if pending_signal == Signal.BUY and position is None:
+            position = _OpenPosition(entry_ts=candle.timestamp, entry_price=candle.open)
+        elif pending_signal == Signal.SELL and position is not None:
             trades.append(
-                _close_trade(position, len(trades), candle.timestamp, candle.close, strategy)
+                _close_trade(position, len(trades), candle.timestamp, candle.open, strategy)
             )
             position = None
+        pending_signal = Signal.HOLD
+
+        signal = strategy.on_candle(candle)
+        if position is None and signal == Signal.BUY:
+            pending_signal = Signal.BUY
+        elif position is not None and signal == Signal.SELL:
+            pending_signal = Signal.SELL
 
     if position is not None:
         last_candle = market_data.candles[-1]

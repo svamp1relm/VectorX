@@ -8,4 +8,4 @@ decision 5). Bump this whenever `vectorx.statistics.confidence`,
 algorithm changes in a way that would change previously-computed results.
 """
 
-ANALYSIS_VERSION = 1
+ANALYSIS_VERSION = 2

@@ -23,16 +23,16 @@ const equity = ref<EquityPoint[]>([])
 const analysis = ref<AnalysisResult | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
+const resultsError = ref<string | null>(null)
+const equityError = ref<string | null>(null)
+const analysisError = ref<string | null>(null)
 
-const finalCapital = computed(() => {
-  const finalEquity = equity.value.at(-1)?.equity
-  if (finalEquity !== undefined) return finalEquity
+const runZeroFinalCapital = computed(() => equity.value.at(-1)?.equity ?? null)
+const meanFinalCapital = computed(() => {
   const initialCapital = detail.value?.spec.portfolio.initial_capital
   const meanTotalReturn = detail.value?.summary.mean_total_return
-  if (initialCapital !== undefined && meanTotalReturn !== undefined) {
-    return initialCapital * (1 + meanTotalReturn)
-  }
-  return null
+  if (initialCapital === undefined || meanTotalReturn === undefined) return null
+  return initialCapital * (1 + meanTotalReturn)
 })
 const totalTrades = computed(() => results.value.reduce((total, run) => total + run.metrics.trades, 0))
 
@@ -52,9 +52,19 @@ function parameterLabel(key: string) {
   return t(`param.${key}`)
 }
 
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
+}
+
 async function load(id: number) {
   loading.value = true
   error.value = null
+  resultsError.value = null
+  equityError.value = null
+  analysisError.value = null
+  results.value = []
+  equity.value = []
+  analysis.value = null
   const [detailResult, resultsResult, equityResult, analysisResult] = await Promise.allSettled([
     getExperiment(id),
     getResults(id),
@@ -63,16 +73,29 @@ async function load(id: number) {
   ])
 
   if (detailResult.status === 'rejected') {
-    error.value =
-      detailResult.reason instanceof Error ? detailResult.reason.message : String(detailResult.reason)
+    error.value = errorMessage(detailResult.reason)
     loading.value = false
     return
   }
   detail.value = detailResult.value
-  results.value = resultsResult.status === 'fulfilled' ? resultsResult.value : []
-  equity.value = equityResult.status === 'fulfilled' ? equityResult.value : []
-  // Unavailable when the experiment wasn't saved with storage.store_trades=true (Фаза 18a/19).
-  analysis.value = analysisResult.status === 'fulfilled' ? analysisResult.value : null
+  if (resultsResult.status === 'fulfilled') {
+    results.value = resultsResult.value
+  } else {
+    resultsError.value = errorMessage(resultsResult.reason)
+  }
+  if (equityResult.status === 'fulfilled') {
+    equity.value = equityResult.value
+  } else {
+    equityError.value = errorMessage(equityResult.reason)
+  }
+  if (analysisResult.status === 'fulfilled') {
+    analysis.value = analysisResult.value
+  } else {
+    const message = errorMessage(analysisResult.reason)
+    if (!message.includes('store_trades') && !message.includes('no raw trades')) {
+      analysisError.value = message
+    }
+  }
   loading.value = false
 }
 
@@ -84,8 +107,8 @@ watch(() => props.id, load)
 <template>
   <div>
     <button data-testid="back-button" @click="$emit('back')">&larr; {{ t('actions.back') }}</button>
-    <p v-if="loading">{{ t('state.loading') }}</p>
-    <p v-else-if="error">{{ error }}</p>
+    <p v-if="loading" role="status">{{ t('state.loading') }}</p>
+    <p v-else-if="error" role="alert">{{ error }}</p>
     <template v-else-if="detail">
       <h1>{{ detail.name }}</h1>
 
@@ -122,6 +145,10 @@ watch(() => props.id, load)
           <dd>{{ detail.spec.portfolio.initial_capital }}</dd>
           <dt>{{ t('detail.riskPerTrade') }}</dt>
           <dd>{{ detail.spec.portfolio.risk_per_trade }}</dd>
+          <dt>{{ t('detail.commission') }}</dt>
+          <dd>{{ detail.spec.portfolio.commission }}</dd>
+          <dt>{{ t('detail.slippage') }}</dt>
+          <dd>{{ detail.spec.portfolio.slippage }}</dd>
         </dl>
         <dl v-else>
           <dt>{{ t('detail.type') }}</dt>
@@ -140,10 +167,12 @@ watch(() => props.id, load)
         <dl>
           <dt>{{ t('detail.runs') }}</dt>
           <dd>{{ detail.summary.runs }}</dd>
-          <dt>{{ t('detail.finalCapital') }}</dt>
-          <dd>{{ finalCapital }}</dd>
+          <dt>{{ t('detail.runZeroFinalCapital') }}</dt>
+          <dd>{{ runZeroFinalCapital ?? '—' }}</dd>
+          <dt>{{ t('detail.meanFinalCapital') }}</dt>
+          <dd>{{ meanFinalCapital ?? '—' }}</dd>
           <dt>{{ t('detail.totalTrades') }}</dt>
-          <dd>{{ totalTrades }}</dd>
+          <dd>{{ resultsError ? '—' : totalTrades }}</dd>
           <dt>{{ t('detail.meanReturn') }}</dt>
           <dd>{{ detail.summary.mean_total_return }}</dd>
           <dt>{{ t('detail.medianReturn') }}</dt>
@@ -167,18 +196,34 @@ watch(() => props.id, load)
           </dd>
           <dt>{{ t('detail.significantVsZero') }}</dt>
           <dd>{{ analysis.significance_vs_zero.significant }}</dd>
-          <dt>{{ t('detail.sharpe') }}</dt>
-          <dd>{{ analysis.risk_adjusted.sharpe }}</dd>
-          <dt>{{ t('detail.sortino') }}</dt>
-          <dd>{{ analysis.risk_adjusted.sortino }}</dd>
+          <dt>{{ t('detail.sharpeGross') }}</dt>
+          <dd>{{ analysis.risk_adjusted.sharpe ?? '—' }}</dd>
+          <dt>{{ t('detail.sortinoGross') }}</dt>
+          <dd>{{ analysis.risk_adjusted.sortino ?? '—' }}</dd>
           <dt>{{ t('detail.calmar') }}</dt>
-          <dd>{{ analysis.risk_adjusted.calmar }}</dd>
+          <dd>{{ analysis.risk_adjusted.calmar ?? '—' }}</dd>
+          <template v-if="analysis.risk_adjusted_net">
+            <dt>{{ t('detail.sharpeNet') }}</dt>
+            <dd>{{ analysis.risk_adjusted_net.sharpe ?? '—' }}</dd>
+            <dt>{{ t('detail.sortinoNet') }}</dt>
+            <dd>{{ analysis.risk_adjusted_net.sortino ?? '—' }}</dd>
+          </template>
+          <template v-if="analysis.confidence_interval_net">
+            <dt>{{ t('detail.expectancyCiNet') }}</dt>
+            <dd>
+              {{ analysis.confidence_interval_net.point_estimate }}
+              ({{ analysis.confidence_interval_net.lower }} &ndash;
+              {{ analysis.confidence_interval_net.upper }})
+            </dd>
+          </template>
         </dl>
       </section>
+      <p v-if="analysisError" role="alert" data-testid="analysis-error">{{ analysisError }}</p>
 
       <section>
         <h2>{{ t('detail.equity') }}</h2>
-        <EquityChart :points="equity" />
+        <p v-if="equityError" role="alert" data-testid="equity-error">{{ equityError }}</p>
+        <EquityChart v-else :points="equity" />
       </section>
 
       <section>
@@ -196,7 +241,8 @@ watch(() => props.id, load)
         <p v-if="detail.spec.type === 'historical_backtest'" data-testid="historical-run-note">
           {{ t('detail.historicalRunNote') }}
         </p>
-        <RunsTable :results="results" />
+        <p v-if="resultsError" role="alert" data-testid="results-error">{{ resultsError }}</p>
+        <RunsTable v-else :results="results" />
       </section>
     </template>
   </div>

@@ -76,3 +76,26 @@ def test_rejects_confidence_out_of_bounds():
 def test_rejects_non_positive_n_resamples():
     with pytest.raises(InvalidModelParametersError):
         block_bootstrap_confidence_interval([1.0, 2.0], block_size=1, seed=1, n_resamples=0)
+
+
+def test_single_run_by_run_matches_original_algorithm():
+    from vectorx.robustness.block_bootstrap import block_bootstrap_confidence_interval_by_run
+
+    values = [1.0, -1.0, 2.0, -2.0, 3.0, -3.0]
+
+    assert block_bootstrap_confidence_interval_by_run(
+        [values], block_size=2, seed=42, n_resamples=100
+    ) == block_bootstrap_confidence_interval(values, block_size=2, seed=42, n_resamples=100)
+
+
+def test_multiple_runs_do_not_share_cross_run_blocks():
+    from vectorx.robustness.block_bootstrap import block_bootstrap_confidence_interval_by_run
+
+    runs = [[1.0, 1.0, 1.0], [-1.0, -1.0, -1.0]]
+
+    result = block_bootstrap_confidence_interval_by_run(
+        runs, block_size=3, seed=42, n_resamples=100
+    )
+
+    assert result.point_estimate == 0.0
+    assert result.lower == result.upper == 0.0

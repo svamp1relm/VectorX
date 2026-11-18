@@ -37,13 +37,16 @@ def metrics_extra_from_json(
     extra: dict,
     *,
     expectancy_theoretical: float | None,
-    expectancy_sample: float,
-    win_rate: float,
+    expectancy_sample: float | None,
+    win_rate: float | None,
     total_return: float,
     max_drawdown: float,
-    profit_factor: float,
-    stdev: float,
+    profit_factor: float | None,
+    stdev: float | None,
     ruined: bool,
+    expectancy_sample_net: float | None = None,
+    win_rate_net: float | None = None,
+    profit_factor_net: float | None = None,
 ) -> Metrics:
     """Reassemble a full `Metrics` from `metrics_extra` plus the dedicated columns."""
     missing = [key for key in _METRICS_EXTRA_REQUIRED_KEYS if key not in extra]
@@ -65,6 +68,9 @@ def metrics_extra_from_json(
         max_drawdown=max_drawdown,
         profit_factor=profit_factor,
         ruined=ruined,
+        expectancy_sample_net=expectancy_sample_net,
+        win_rate_net=win_rate_net,
+        profit_factor_net=profit_factor_net,
     )
 
 

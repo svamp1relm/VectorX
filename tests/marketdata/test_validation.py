@@ -106,3 +106,21 @@ def test_no_gap_check_without_expected_interval():
     gaps = validate_market_data(data)
 
     assert gaps == ()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("open", 0.0),
+        ("high", -1.0),
+        ("low", float("nan")),
+        ("close", float("inf")),
+        ("volume", float("nan")),
+        ("volume", float("inf")),
+    ],
+)
+def test_non_positive_or_non_finite_ohlcv_values_raise(field, value):
+    data = _data([_candle(0, **{field: value})])
+
+    with pytest.raises(InvalidMarketDataError):
+        validate_market_data(data)

@@ -11,6 +11,7 @@ error.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from math import isfinite
 
 from vectorx.core.errors import InvalidMarketDataError
 from vectorx.marketdata.types import MarketCandle, MarketData
@@ -66,6 +67,11 @@ def validate_market_data(
 
 
 def _validate_candle(candle: MarketCandle, *, index: int) -> None:
+    values = (candle.open, candle.high, candle.low, candle.close, candle.volume)
+    if not all(isfinite(value) for value in values):
+        raise InvalidMarketDataError(f"candle {index}: OHLCV values must be finite")
+    if min(candle.open, candle.high, candle.low, candle.close) <= 0.0:
+        raise InvalidMarketDataError(f"candle {index}: OHLC prices must be > 0")
     if candle.low > candle.high:
         raise InvalidMarketDataError(
             f"candle {index}: low ({candle.low}) must be <= high ({candle.high})"

@@ -21,8 +21,10 @@ class SensitivityPoint:
     """One sweep combination's parameter values plus its resulting statistics."""
 
     params: dict
-    expectancy_sample: float
+    expectancy_sample: float | None
     sharpe: float | None
+    expectancy_sample_net: float | None
+    sharpe_net: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,16 +45,39 @@ def run_sensitivity_analysis(sweep: SweepSpec) -> SensitivityResult:
         result = run_experiment(spec)
         assert result.run_trades is not None  # sweep forces storage.store_trades=true
         r_multiples = [trade.r_multiple for run_trades in result.run_trades for trade in run_trades]
-        expectancy_sample = sum(r_multiples) / len(r_multiples)
-        risk_adjusted = compute_risk_adjusted_metrics(
-            r_multiples,
-            total_return=result.summary.mean_total_return,
-            max_drawdown=max(run.metrics.max_drawdown for run in result.run_results),
+        net_r_multiples = [
+            trade.net_r_multiple if trade.net_r_multiple is not None else trade.r_multiple
+            for run_trades in result.run_trades
+            for trade in run_trades
+        ]
+        expectancy_sample = sum(r_multiples) / len(r_multiples) if r_multiples else None
+        expectancy_sample_net = (
+            sum(net_r_multiples) / len(net_r_multiples) if net_r_multiples else None
         )
+        sharpe = None
+        sharpe_net = None
+        if r_multiples:
+            max_drawdown = max(run.metrics.max_drawdown for run in result.run_results)
+            risk_adjusted = compute_risk_adjusted_metrics(
+                r_multiples,
+                total_return=result.summary.mean_total_return,
+                max_drawdown=max_drawdown,
+            )
+            risk_adjusted_net = compute_risk_adjusted_metrics(
+                net_r_multiples,
+                total_return=result.summary.mean_total_return,
+                max_drawdown=max_drawdown,
+            )
+            sharpe = risk_adjusted.sharpe
+            sharpe_net = risk_adjusted_net.sharpe
         params = {key: _get_dotted(spec, key) for key in sweep.grid}
         points.append(
             SensitivityPoint(
-                params=params, expectancy_sample=expectancy_sample, sharpe=risk_adjusted.sharpe
+                params=params,
+                expectancy_sample=expectancy_sample,
+                sharpe=sharpe,
+                expectancy_sample_net=expectancy_sample_net,
+                sharpe_net=sharpe_net,
             )
         )
 

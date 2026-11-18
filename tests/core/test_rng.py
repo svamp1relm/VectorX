@@ -1,6 +1,7 @@
 """Derived per-run RNG: reproducible within a run, independent across runs."""
 
 import numpy as np
+import pytest
 
 from vectorx.core.rng import derived_rng, derived_seed_value
 
@@ -42,3 +43,12 @@ def test_derived_seed_value_differs_by_run_index():
 
 def test_derived_seed_value_is_plain_int():
     assert isinstance(derived_seed_value(42, 0), int)
+
+
+def test_negative_seed_is_rejected():
+    from vectorx.core.errors import InvalidModelParametersError
+
+    with pytest.raises(InvalidModelParametersError):
+        derived_rng(-1, 0)
+    with pytest.raises(InvalidModelParametersError):
+        derived_seed_value(-1, 0)

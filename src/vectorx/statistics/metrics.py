@@ -7,7 +7,6 @@ parameters and are optional: a historical backtest run has no such model, so
 `expectancy_theoretical` is `None` unless all three are given.
 """
 
-from vectorx.core.errors import EmptyTradesError
 from vectorx.core.types import EquityPoint, Metrics, Trade
 from vectorx.math.expectancy import expectancy_sample, expectancy_theoretical
 
@@ -22,18 +21,41 @@ def compute_metrics(
     loss_r: float | None = None,
 ) -> Metrics:
     """Compute per-run statistics. `ruined` is passed through from the portfolio."""
-    if not trades:
-        raise EmptyTradesError("compute_metrics requires at least one trade")
-
     if p_win is not None and win_r is not None and loss_r is not None:
         expectancy_theo = expectancy_theoretical(p_win=p_win, win_r=win_r, loss_r=loss_r)
     else:
         expectancy_theo = None
 
+    if not trades:
+        equity_end = equity_curve[-1].equity
+        return Metrics(
+            trades=0,
+            wins=0,
+            losses=0,
+            win_rate=None,
+            avg_win=None,
+            avg_loss=None,
+            expectancy_theoretical=expectancy_theo,
+            expectancy_sample=None,
+            total_return=(equity_end - initial_capital) / initial_capital,
+            avg_trade=None,
+            variance=None,
+            stdev=None,
+            max_drawdown=max(point.drawdown for point in equity_curve),
+            profit_factor=None,
+            ruined=ruined,
+        )
+
     r_multiples = [trade.r_multiple for trade in trades]
+    net_r_multiples = [
+        trade.net_r_multiple if trade.net_r_multiple is not None else trade.r_multiple
+        for trade in trades
+    ]
     money_pnls = [trade.pnl_money for trade in trades]
     wins_r = [r for r in r_multiples if r > 0.0]
     losses_r = [r for r in r_multiples if r < 0.0]
+    wins_net = [r for r in net_r_multiples if r > 0.0]
+    losses_net = [r for r in net_r_multiples if r < 0.0]
 
     gross_profit = sum(wins_r)
     gross_loss = abs(sum(losses_r))
@@ -41,6 +63,13 @@ def compute_metrics(
         profit_factor = gross_profit / gross_loss
     else:
         profit_factor = float("inf") if gross_profit > 0.0 else 0.0
+
+    net_profit = sum(wins_net)
+    net_loss = abs(sum(losses_net))
+    if net_loss > 0.0:
+        profit_factor_net = net_profit / net_loss
+    else:
+        profit_factor_net = float("inf") if net_profit > 0.0 else 0.0
 
     mean_r = sum(r_multiples) / len(r_multiples)
     variance = sum((r - mean_r) ** 2 for r in r_multiples) / len(r_multiples)
@@ -62,4 +91,7 @@ def compute_metrics(
         max_drawdown=max(point.drawdown for point in equity_curve),
         profit_factor=profit_factor,
         ruined=ruined,
+        expectancy_sample_net=expectancy_sample(net_r_multiples),
+        win_rate_net=len(wins_net) / len(trades),
+        profit_factor_net=profit_factor_net,
     )

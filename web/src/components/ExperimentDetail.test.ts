@@ -95,7 +95,7 @@ describe('ExperimentDetail', () => {
     expect(wrapper.text()).toContain('baseline_expectancy')
     expect(wrapper.text()).toContain('0.55')
     expect(wrapper.text()).toContain('10000')
-    expect(wrapper.text()).toContain('Final capital')
+    expect(wrapper.text()).toContain('Run 0 final capital')
     expect(wrapper.text()).toContain('10000')
     expect(wrapper.text()).toContain('Total trades')
     expect(wrapper.text()).toContain('20')
@@ -209,5 +209,20 @@ describe('ExperimentDetail', () => {
     expect(wrapper.find('[data-testid="historical-run-note"]').text()).toContain(
       'Runs is 1 because a historical backtest replays one fixed dataset once'
     )
+  })
+
+  it('surfaces required request failures instead of showing empty results', async () => {
+    getExperiment.mockResolvedValueOnce(detail)
+    getResults.mockRejectedValueOnce(new Error('results failed'))
+    getEquity.mockRejectedValueOnce(new Error('equity failed'))
+    getAnalysis.mockRejectedValueOnce(new Error('analysis failed'))
+
+    const wrapper = shallowMount(ExperimentDetail, { props: { id: 1 } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="results-error"]').text()).toContain('results failed')
+    expect(wrapper.get('[data-testid="equity-error"]').text()).toContain('equity failed')
+    expect(wrapper.get('[data-testid="analysis-error"]').text()).toContain('analysis failed')
+    expect(wrapper.text()).not.toContain('Total trades0')
   })
 })

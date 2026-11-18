@@ -9,15 +9,19 @@ cannot work on a batch without them.
 """
 
 from itertools import product
+from math import prod
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from vectorx.core.errors import ExperimentTooLargeError
-from vectorx.experiments.spec import ExperimentSpec, parse_experiment_spec
+from vectorx.core.errors import ExperimentTooLargeError, InvalidModelParametersError
+from vectorx.experiments.spec import ExperimentSpec, MonteCarloExperimentSpec, parse_experiment_spec
 
 MAX_BATCH_EXPERIMENTS = 100
 """Resource guard on the number of ExperimentSpec one sweep may generate."""
+
+MAX_BATCH_OPERATIONS = 2_000_000
+"""Aggregate Monte Carlo trade budget across all experiments in one sweep."""
 
 
 class SweepSpec(BaseModel):
@@ -53,16 +57,19 @@ def generate_sweep_specs(sweep: SweepSpec) -> tuple[ExperimentSpec, ...]:
     """Expand `sweep.grid`'s cartesian product over `sweep.base` into concrete specs."""
     keys = list(sweep.grid.keys())
     value_lists = [sweep.grid[key] for key in keys]
-    combinations = list(product(*value_lists)) if keys else [()]
+    if any(not values for values in value_lists):
+        raise InvalidModelParametersError("sweep grid values must not be empty")
 
-    if len(combinations) > MAX_BATCH_EXPERIMENTS:
+    combination_count = prod((len(values) for values in value_lists), start=1)
+    if combination_count > MAX_BATCH_EXPERIMENTS:
         raise ExperimentTooLargeError(
-            f"sweep would generate {len(combinations)} experiments, exceeding the "
+            f"sweep would generate {combination_count} experiments, exceeding the "
             f"limit of {MAX_BATCH_EXPERIMENTS}"
         )
 
     base_name = sweep.base.get("name", sweep.hypothesis)
     specs = []
+    combinations = product(*value_lists) if keys else [()]
     for index, combo in enumerate(combinations):
         payload = dict(sweep.base)
         for key, value in zip(keys, combo, strict=True):
@@ -70,5 +77,16 @@ def generate_sweep_specs(sweep: SweepSpec) -> tuple[ExperimentSpec, ...]:
         payload = _set_dotted(payload, "name", f"{base_name}_{index}")
         payload = _set_dotted(payload, "storage.store_trades", True)
         specs.append(parse_experiment_spec(payload))
+
+    operation_count = sum(
+        spec.runs * spec.model.n_trades
+        for spec in specs
+        if isinstance(spec, MonteCarloExperimentSpec)
+    )
+    if operation_count > MAX_BATCH_OPERATIONS:
+        raise ExperimentTooLargeError(
+            f"sweep would execute {operation_count} Monte Carlo trades, exceeding the "
+            f"aggregate limit of {MAX_BATCH_OPERATIONS}"
+        )
 
     return tuple(specs)

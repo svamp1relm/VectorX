@@ -27,17 +27,17 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter,
 
 
 class ExperimentModelSpec(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     p_win: float
     win_r: float
     loss_r: float
-    n_trades: int
+    n_trades: int = Field(gt=0)
     risk_unit_fraction: float = Field(default=0.01, gt=0.0, le=1.0)
 
 
 class ExperimentPortfolioSpec(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     initial_capital: float
     risk_per_trade: float
@@ -46,7 +46,7 @@ class ExperimentPortfolioSpec(BaseModel):
 
 
 class ExperimentStorageSpec(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     store_trades: bool = False
 
@@ -54,12 +54,12 @@ class ExperimentStorageSpec(BaseModel):
 class MonteCarloExperimentSpec(BaseModel):
     """YAML v1 shape, unchanged since the MVP plan; `type` defaults for back-compat."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["monte_carlo"] = "monte_carlo"
     name: str
-    seed: int
-    runs: int
+    seed: int = Field(ge=0)
+    runs: int = Field(gt=0)
     model: ExperimentModelSpec
     portfolio: ExperimentPortfolioSpec
     storage: ExperimentStorageSpec = ExperimentStorageSpec()
@@ -68,7 +68,7 @@ class MonteCarloExperimentSpec(BaseModel):
 class HistoricalDataSpec(BaseModel):
     """Only a CSV `DataSource` exists so far (Фаза 12); `source` is fixed."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     source: Literal["csv"] = "csv"
     path: str
@@ -80,7 +80,7 @@ class MovingAverageCrossoverStrategySpec(BaseModel):
     """The first strategy (Фаза 14); `type` defaults for back-compat with
     pre-Фаза-19 historical specs that predate benchmark strategies."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["moving_average_crossover"] = "moving_average_crossover"
     fast_period: int = Field(gt=0)
@@ -99,7 +99,7 @@ class MovingAverageCrossoverStrategySpec(BaseModel):
 class BuyAndHoldStrategySpec(BaseModel):
     """`BuyAndHoldStrategy` benchmark (Фаза 19)."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["buy_and_hold"]
     stop_loss_pct: float = Field(gt=0.0, le=1.0)
@@ -108,7 +108,7 @@ class BuyAndHoldStrategySpec(BaseModel):
 class RandomEntryStrategySpec(BaseModel):
     """`RandomEntryStrategy` benchmark (Фаза 19); seeded off the experiment's own `seed`."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["random_entry"]
     stop_loss_pct: float = Field(gt=0.0, le=1.0)
@@ -119,7 +119,7 @@ class RandomEntryStrategySpec(BaseModel):
 class BreakoutStrategySpec(BaseModel):
     """`BreakoutStrategy` (Фаза 22) — the pipeline-generalization litmus test strategy."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["breakout"]
     entry_lookback: int = Field(gt=0)
@@ -148,11 +148,11 @@ HistoricalStrategySpec = Annotated[
 class HistoricalBacktestExperimentSpec(BaseModel):
     """A historical backtest is always one deterministic pass: `runs` is fixed at 1."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
     type: Literal["historical_backtest"]
     name: str
-    seed: int = 0
+    seed: int = Field(default=0, ge=0)
     runs: Literal[1] = 1
     data: HistoricalDataSpec
     strategy: HistoricalStrategySpec

@@ -108,3 +108,20 @@ def test_write_market_data_csv_round_trips_through_csv_data_source(tmp_path):
     reloaded = CsvDataSource(out_path, symbol="BTCUSDT", timeframe="1h").load()
 
     assert reloaded.candles == original.candles
+
+
+def test_truncated_row_raises_domain_error(tmp_path):
+    path = tmp_path / "truncated.csv"
+    path.write_text("timestamp,open,high,low,close,volume\n2024-01-01T00:00:00Z,1,2\n")
+
+    with pytest.raises(InvalidMarketDataError):
+        CsvDataSource(path, symbol="BTCUSDT", timeframe="1h").load()
+
+
+def test_missing_file_raises_domain_error(tmp_path):
+    path = tmp_path / "missing.csv"
+
+    with pytest.raises(InvalidMarketDataError):
+        CsvDataSource(path, symbol="BTCUSDT", timeframe="1h").load()
+    with pytest.raises(InvalidMarketDataError):
+        compute_data_version(path)

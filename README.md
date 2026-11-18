@@ -8,9 +8,13 @@
 Platform v1"**. Что уже реализовано:
 
 - Monte Carlo эксперименты (вероятностная модель, N runs) и исторический бэктест
-  (MA Crossover / Breakout / Buy&Hold / Random-entry на CSV OHLCV).
+  (MA Crossover / Breakout / Buy&Hold / Random-entry на CSV OHLCV). Сигналы свечи `t`
+  исполняются по open `t+1`, без same-close look-ahead. Возможен валидный результат без сделок.
 - Статистика: bootstrap confidence intervals, significance tests, Sharpe/Sortino/Calmar.
-- Out-of-sample валидация (train/test split) и parameter sweep батчи под общей гипотезой.
+  Gross R и net R после комиссий/slippage разделены; текущие версии — `experiment_version=2`,
+  `analysis_version=2`.
+- Out-of-sample валидация (train/test split) с indicator warm-up, in-memory срезами и
+  parameter sweep батчами под общей гипотезой.
 - Robustness testing (parameter sensitivity, walk-forward, block bootstrap) — из Python,
   через API и вкладку **Robustness** в Dashboard. Для block bootstrap эксперимент должен
   быть сохранён с `storage.store_trades=true`.
@@ -27,6 +31,8 @@ Platform v1"**. Что уже реализовано:
   данные, стратегии, backtest engine.
 - [docs/VECTORX-RESEARCH-PLATFORM-ROADMAP.md](docs/VECTORX-RESEARCH-PLATFORM-ROADMAP.md) —
   raw trades, батчи, statistical toolkit, out-of-sample, robustness, экспорт.
+- [docs/VECTORX-CODE-REVIEW-REMEDIATION-PLAN.md](docs/VECTORX-CODE-REVIEW-REMEDIATION-PLAN.md) —
+  исправления resource safety, execution, метрик, хранения, OOS, UI и security.
 
 ## Что не входит
 
@@ -41,6 +47,13 @@ multiprocessing, автоматический выбор "лучших" пара
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[postgres,api,dev]"
+```
+
+Для зафиксированного исследовательского окружения используйте `requirements-research.lock`:
+
+```bash
+pip install -r requirements-research.lock
+pip install --no-deps -e .
 ```
 
 Требуются Python 3.12+, Node.js с npm и Docker с Docker Compose.
@@ -69,6 +82,11 @@ unset VECTORX_CORS_ORIGINS VITE_API_BASE VECTORX_API_BASE
 добавляют `localhost`, `127.0.0.1` и `::1` в `NO_PROXY`/`no_proxy`, чтобы локальные
 health-check и API-запросы не проходили через внешний proxy. Остальные proxy-настройки
 сохраняются.
+
+PostgreSQL публикуется только на `127.0.0.1`. API читает CSV только внутри
+`VECTORX_DATA_ROOT` (по умолчанию `configs/experiments/data`); пути с `..`, абсолютные пути
+и symlinks за его пределами отклоняются. Платформа рассчитана на локальный запуск без auth;
+для внешнего доступа требуется отдельная security-конфигурация.
 
 Логи фоновых процессов — `.demo/api.log`, `.demo/web.log`. Остановить:
 

@@ -16,14 +16,18 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 async function run() {
-  if (baseExperimentId.value === null) return
+  result.value = null
+  error.value = null
+  if (baseExperimentId.value === null) {
+    error.value = t('robustness.missingBaseError')
+    return
+  }
+  if (loading.value) return
   if (!trainStart.value || !trainEnd.value || !testStart.value || !testEnd.value) {
     error.value = t('oos.missingDatesError')
     return
   }
   loading.value = true
-  error.value = null
-  result.value = null
   try {
     const detail = await getExperiment(baseExperimentId.value)
     if (detail.spec.type !== 'historical_backtest') {
@@ -88,11 +92,11 @@ async function run() {
           data-testid="oos-test-end"
         />
       </label>
-      <button type="button" data-testid="oos-run-button" @click="run">{{ t('oos.run') }}</button>
+      <button type="button" :disabled="loading" data-testid="oos-run-button" @click="run">{{ t('oos.run') }}</button>
     </div>
 
-    <p v-if="loading">{{ t('state.loading') }}</p>
-    <p v-else-if="error">{{ error }}</p>
+    <p v-if="loading" role="status">{{ t('state.loading') }}</p>
+    <p v-else-if="error" role="alert">{{ error }}</p>
     <template v-else-if="result">
       <section>
         <h3>{{ t('oos.train') }}</h3>
@@ -104,7 +108,7 @@ async function run() {
       </section>
       <section>
         <h3>{{ t('oos.deltaTrainTest') }}</h3>
-        <p data-testid="oos-delta">{{ result.comparison.delta_train_test }}</p>
+        <p data-testid="oos-delta">{{ result.comparison.delta_train_test ?? '—' }}</p>
       </section>
     </template>
   </div>

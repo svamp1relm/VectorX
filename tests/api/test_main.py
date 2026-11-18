@@ -18,7 +18,8 @@ VALID_SPEC = {
 
 
 @pytest.fixture
-def client(clean_postgres_engine):
+def client(clean_postgres_engine, tmp_path, monkeypatch):
+    monkeypatch.setenv("VECTORX_DATA_ROOT", str(tmp_path))
     app.dependency_overrides[get_engine] = lambda: clean_postgres_engine
     with TestClient(app) as test_client:
         yield test_client
@@ -305,6 +306,20 @@ def test_create_batch_over_resource_guard_returns_400(client):
     assert response.status_code == 400
 
 
+def test_batch_failure_rolls_back_all_experiments_and_the_batch(client):
+    sweep = {
+        "hypothesis": "atomicity",
+        "base": VALID_SPEC,
+        "grid": {"model.p_win": [0.55, 2.0]},
+    }
+
+    response = client.post("/batches", json=sweep)
+
+    assert response.status_code == 400
+    assert client.get("/experiments").json() == []
+    assert client.get("/batches").json() == []
+
+
 def test_analysis_endpoint_returns_ci_and_risk_adjusted_metrics(client):
     spec = {**VALID_SPEC, "storage": {"store_trades": True}}
     created = client.post("/experiments", json=spec).json()
@@ -370,6 +385,45 @@ def test_out_of_sample_endpoint_returns_train_test_and_comparison(client, tmp_pa
     assert "delta_train_test" in body["comparison"]
 
 
+def test_api_rejects_csv_paths_outside_data_root(client, tmp_path):
+    outside = tmp_path.parent / "outside_vectorx_data.csv"
+    outside.write_text("timestamp,open,high,low,close,volume\n2024-01-01T00:00:00Z,1,2,0.5,1,10\n")
+    payload = _walk_forward_payload(outside)["base"]
+
+    response = client.post("/experiments", json=payload)
+
+    assert response.status_code == 403
+
+
+def test_api_rejects_symlink_escape_from_data_root(client, tmp_path):
+    outside = tmp_path.parent / "outside_vectorx_symlink.csv"
+    outside.write_text("timestamp,open,high,low,close,volume\n2024-01-01T00:00:00Z,1,2,0.5,1,10\n")
+    link = tmp_path / "linked.csv"
+    link.symlink_to(outside)
+    payload = _walk_forward_payload(link)["base"]
+
+    response = client.post("/experiments", json=payload)
+
+    assert response.status_code == 403
+
+
+def test_out_of_sample_rejects_naive_datetimes(client, tmp_path):
+    csv_path = _write_csv(tmp_path, [100.0 + i for i in range(20)])
+    payload = _walk_forward_payload(csv_path)
+    payload["train_start"] = payload.pop("start")
+    payload["train_end"] = payload.pop("end")
+    payload["test_start"] = "2024-01-03T00:00:00"
+    payload["test_end"] = "2024-01-03T11:00:00"
+    payload.pop("train_window_days")
+    payload.pop("test_window_days")
+    payload.pop("step_days")
+    payload.pop("reference_risk_fraction")
+
+    response = client.post("/out-of-sample", json=payload)
+
+    assert response.status_code == 422
+
+
 def test_export_endpoint_returns_byte_identical_json_across_two_calls(client):
     created = client.post("/experiments", json=VALID_SPEC).json()
 
@@ -431,7 +485,7 @@ def test_sensitivity_endpoint_is_deterministic_and_does_not_persist(client):
     assert response_a.status_code == 200
     assert response_a.json() == response_b.json()
     body = response_a.json()
-    assert body["analysis_version"] == 1
+    assert body["analysis_version"] == 2
     assert len(body["points"]) == 2
     assert body["points"][0]["params"] == {"model.p_win": 0.5}
     assert "expectancy_sample" in body["points"][0]
@@ -467,7 +521,7 @@ def test_walk_forward_endpoint_returns_one_result_per_window(client, tmp_path):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["analysis_version"] == 1
+    assert body["analysis_version"] == 2
     assert len(body["windows"]) == 3
     first = body["windows"][0]
     assert first["window"]["train_start"] == "2024-01-01T00:00:00+00:00"
@@ -528,7 +582,7 @@ def test_block_bootstrap_endpoint_is_deterministic(client):
     assert response_a.status_code == 200
     assert response_a.json() == response_b.json()
     body = response_a.json()
-    assert body["analysis_version"] == 1
+    assert body["analysis_version"] == 2
     assert body["block_size"] == 2
     ci = body["confidence_interval"]
     assert ci["lower"] <= ci["point_estimate"] <= ci["upper"]

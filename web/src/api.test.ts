@@ -153,7 +153,7 @@ describe('api client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(
-        /\/experiments\/26\/robustness\/block-bootstrap\?block_size=20&seed=7&confidence=0\.9&n_resamples=500$/,
+        /\/experiments\/26\/robustness\/block-bootstrap\?block_size=20&seed=7&confidence=0\.9&n_resamples=500&cost_basis=gross_r$/,
       ),
     )
   })

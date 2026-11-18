@@ -7,13 +7,16 @@ to the same `base` spec with a different train/test time range.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from vectorx.core.errors import InvalidModelParametersError
+from vectorx.core.errors import ExperimentTooLargeError, InvalidModelParametersError
 from vectorx.experiments.out_of_sample import (
     OutOfSampleResult,
     OutOfSampleSpec,
     run_out_of_sample,
 )
 from vectorx.experiments.spec import HistoricalBacktestExperimentSpec
+
+MAX_WALK_FORWARD_WINDOWS = 100
+"""Maximum number of OOS windows generated for one walk-forward request."""
 
 _MIN_GAP = timedelta(microseconds=1)
 """The smallest possible step past `train_end` that still satisfies
@@ -48,21 +51,30 @@ def generate_walk_forward_windows(
     if step <= timedelta(0):
         raise InvalidModelParametersError(f"step must be > 0, got {step}")
 
-    windows: list[WalkForwardWindow] = []
-    train_start = start
-    while True:
+    first_span = train_window + _MIN_GAP + test_window
+    if start + first_span > end:
+        return ()
+
+    window_count = (end - start - first_span) // step + 1
+    if window_count > MAX_WALK_FORWARD_WINDOWS:
+        raise ExperimentTooLargeError(
+            f"walk-forward would generate {window_count} windows, exceeding the "
+            f"limit of {MAX_WALK_FORWARD_WINDOWS}"
+        )
+
+    windows = []
+    for index in range(window_count):
+        train_start = start + index * step
         train_end = train_start + train_window
         test_start = train_end + _MIN_GAP
-        test_end = test_start + test_window
-        if test_end > end:
-            break
         windows.append(
             WalkForwardWindow(
-                train_start=train_start, train_end=train_end,
-                test_start=test_start, test_end=test_end,
+                train_start=train_start,
+                train_end=train_end,
+                test_start=test_start,
+                test_end=test_start + test_window,
             )
         )
-        train_start += step
 
     return tuple(windows)
 

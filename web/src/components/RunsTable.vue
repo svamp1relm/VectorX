@@ -25,11 +25,11 @@ const { t } = usePreferences()
       <tr v-for="run in results" :key="run.run_index">
         <td>{{ run.run_index }}</td>
         <td>{{ run.metrics.trades }}</td>
-        <td>{{ run.metrics.win_rate }}</td>
-        <td>{{ run.metrics.expectancy_sample }}</td>
+        <td>{{ run.metrics.win_rate ?? '—' }}</td>
+        <td>{{ run.metrics.expectancy_sample ?? '—' }}</td>
         <td>{{ run.metrics.total_return }}</td>
         <td>{{ run.metrics.max_drawdown }}</td>
-        <td>{{ run.metrics.profit_factor }}</td>
+        <td>{{ run.metrics.profit_factor ?? '—' }}</td>
         <td>{{ run.metrics.ruined }}</td>
       </tr>
     </tbody>

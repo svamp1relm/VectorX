@@ -18,6 +18,12 @@ const referenceRiskFraction = ref(0.01)
 const result = ref<ExpectancyComparisonResult | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const listLoading = ref(true)
+const listError = ref<string | null>(null)
+
+watch([selectedId, referenceRiskFraction], () => {
+  result.value = null
+})
 
 const counterpartType = computed(() =>
   props.detail.spec.type === 'monte_carlo' ? 'historical_backtest' : 'monte_carlo',
@@ -54,6 +60,7 @@ async function compare() {
   if (selectedId.value === null) return
   loading.value = true
   error.value = null
+  result.value = null
   try {
     const monteCarloExperimentId =
       props.detail.spec.type === 'monte_carlo' ? props.detail.id : selectedId.value
@@ -72,7 +79,15 @@ async function compare() {
 }
 
 onMounted(async () => {
-  experiments.value = await listExperiments()
+  listLoading.value = true
+  listError.value = null
+  try {
+    experiments.value = await listExperiments()
+  } catch (err) {
+    listError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    listLoading.value = false
+  }
 })
 </script>
 
@@ -84,7 +99,7 @@ onMounted(async () => {
     <div class="comparison-controls">
       <label>
         <span>{{ t('comparison.counterpart') }}</span>
-        <select v-model.number="selectedId" data-testid="comparison-counterpart">
+        <select v-model.number="selectedId" :disabled="loading" data-testid="comparison-counterpart">
           <option v-for="experiment in counterparts" :key="experiment.id" :value="experiment.id">
             {{ experiment.name }}
           </option>
@@ -98,6 +113,7 @@ onMounted(async () => {
           min="0.000001"
           max="1"
           step="0.001"
+          :disabled="loading"
           data-testid="reference-risk-fraction"
         />
       </label>
@@ -111,8 +127,10 @@ onMounted(async () => {
       </button>
     </div>
 
-    <p v-if="counterparts.length === 0">{{ t('comparison.noCounterpart') }}</p>
-    <p v-else-if="error" class="comparison-warning">{{ error }}</p>
+    <p v-if="listLoading" role="status">{{ t('state.loading') }}</p>
+    <p v-else-if="listError" role="alert">{{ listError }}</p>
+    <p v-else-if="counterparts.length === 0">{{ t('comparison.noCounterpart') }}</p>
+    <p v-if="error" class="comparison-warning" role="alert">{{ error }}</p>
 
     <template v-if="result">
       <table data-testid="comparison-values">

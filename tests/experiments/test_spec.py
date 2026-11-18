@@ -321,3 +321,32 @@ def test_breakout_strategy_spec_rejects_non_positive_lookback():
                 },
             }
         )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_spec_rejects_non_finite_numbers(value):
+    with pytest.raises(ValidationError):
+        parse_experiment_spec(
+            {
+                "name": "invalid",
+                "seed": 0,
+                "runs": 1,
+                "model": {"p_win": value, "win_r": 2.0, "loss_r": -1.0, "n_trades": 1},
+                "portfolio": {"initial_capital": 10000, "risk_per_trade": 0.01},
+            }
+        )
+
+
+@pytest.mark.parametrize("field,value", [("seed", -1), ("runs", 0)])
+def test_spec_rejects_invalid_seed_and_runs(field, value):
+    with pytest.raises(ValidationError):
+        parse_experiment_spec(
+            {
+                "name": "invalid",
+                "seed": 0,
+                "runs": 1,
+                "model": {"p_win": 0.5, "win_r": 2.0, "loss_r": -1.0, "n_trades": 1},
+                "portfolio": {"initial_capital": 10000, "risk_per_trade": 0.01},
+                field: value,
+            }
+        )

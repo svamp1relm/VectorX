@@ -8,8 +8,8 @@ peak-to-trough drawdown, and stops early on ruin (equity <= 0).
 
 import pytest
 
-from vectorx.core.errors import EmptyTradesError, InvalidModelParametersError
-from vectorx.core.types import Trade
+from vectorx.core.errors import InvalidModelParametersError
+from vectorx.core.types import EquityPoint, Trade
 from vectorx.simulation.portfolio import simulate_portfolio
 
 
@@ -145,6 +145,23 @@ def test_rejects_negative_commission_or_slippage():
         )
 
 
-def test_rejects_empty_trades():
-    with pytest.raises(EmptyTradesError):
-        simulate_portfolio(trades=(), initial_capital=10_000.0, risk_per_trade=0.01)
+def test_empty_trades_preserve_initial_capital():
+    result = simulate_portfolio(trades=(), initial_capital=10_000.0, risk_per_trade=0.01)
+
+    assert result.trades == ()
+    assert result.equity_curve == (EquityPoint(index=0, equity=10_000.0, drawdown=0.0),)
+    assert result.ruined is False
+
+
+@pytest.mark.parametrize("field", ["initial_capital", "risk_per_trade", "commission_r", "slippage_r"])
+def test_rejects_non_finite_portfolio_parameters(field):
+    parameters = {
+        "initial_capital": 10_000.0,
+        "risk_per_trade": 0.01,
+        "commission_r": 0.0,
+        "slippage_r": 0.0,
+        field: float("nan"),
+    }
+
+    with pytest.raises(InvalidModelParametersError):
+        simulate_portfolio(trades=(_trade(0, 2.0),), **parameters)

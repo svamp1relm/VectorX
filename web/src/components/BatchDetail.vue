@@ -53,7 +53,11 @@ watch(() => props.id, load)
             v-for="experiment in batch.experiments"
             :key="experiment.id"
             :data-testid="`batch-experiment-row-${experiment.id}`"
+            tabindex="0"
+            role="button"
             @click="emit('selectExperiment', experiment.id)"
+            @keydown.enter.prevent="emit('selectExperiment', experiment.id)"
+            @keydown.space.prevent="emit('selectExperiment', experiment.id)"
           >
             <td>{{ experiment.name }}</td>
             <td>{{ experiment.seed }}</td>

@@ -10,14 +10,13 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from vectorx.core.errors import EmptyTradesError
 from vectorx.core.types import HistogramBins
 
 
 def compute_histogram_bins(values: Sequence[float], bins: int = 50) -> HistogramBins:
     """Compute a fixed-bin-count histogram over `values`."""
     if not values:
-        raise EmptyTradesError("compute_histogram_bins requires at least one value")
+        return HistogramBins(edges=(), counts=())
 
     vmin = min(values)
     vmax = max(values)

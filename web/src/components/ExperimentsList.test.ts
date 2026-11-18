@@ -48,6 +48,16 @@ describe('ExperimentsList', () => {
     expect(wrapper.emitted('select')).toEqual([[1]])
   })
 
+  it('emits select when a row is activated from the keyboard', async () => {
+    listExperiments.mockResolvedValueOnce(items)
+
+    const wrapper = mount(ExperimentsList)
+    await flushPromises()
+    await wrapper.find('[data-testid="experiment-row-1"]').trigger('keydown.enter')
+
+    expect(wrapper.emitted('select')).toEqual([[1]])
+  })
+
   it('shows an empty state with no experiments', async () => {
     listExperiments.mockResolvedValueOnce([])
 

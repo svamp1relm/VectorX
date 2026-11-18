@@ -25,8 +25,8 @@ onMounted(async () => {
 <template>
   <div>
     <h2>{{ t('list.title') }}</h2>
-    <p v-if="loading">{{ t('state.loading') }}</p>
-    <p v-else-if="error">{{ error }}</p>
+    <p v-if="loading" role="status">{{ t('state.loading') }}</p>
+    <p v-else-if="error" role="alert">{{ error }}</p>
     <p v-else-if="experiments.length === 0">{{ t('state.noExperiments') }}</p>
     <table v-else>
       <thead>
@@ -45,7 +45,11 @@ onMounted(async () => {
           v-for="experiment in experiments"
           :key="experiment.id"
           :data-testid="`experiment-row-${experiment.id}`"
+          tabindex="0"
+          role="button"
           @click="emit('select', experiment.id)"
+          @keydown.enter.prevent="emit('select', experiment.id)"
+          @keydown.space.prevent="emit('select', experiment.id)"
         >
           <td>{{ experiment.name }}</td>
           <td>{{ experiment.seed }}</td>

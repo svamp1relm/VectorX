@@ -20,6 +20,7 @@ const createError = ref<string | null>(null)
 
 async function load() {
   loading.value = true
+  error.value = null
   try {
     batches.value = await listBatches()
   } catch (err) {
@@ -102,8 +103,8 @@ async function create() {
       <p v-if="createError">{{ createError }}</p>
     </section>
 
-    <p v-if="loading">{{ t('state.loading') }}</p>
-    <p v-else-if="error">{{ error }}</p>
+    <p v-if="loading" role="status">{{ t('state.loading') }}</p>
+    <p v-else-if="error" role="alert">{{ error }}</p>
     <p v-else-if="batches.length === 0">{{ t('batches.empty') }}</p>
     <table v-else>
       <thead>
@@ -118,7 +119,11 @@ async function create() {
           v-for="batch in batches"
           :key="batch.id"
           :data-testid="`batch-row-${batch.id}`"
+          tabindex="0"
+          role="button"
           @click="emit('select', batch.id)"
+          @keydown.enter.prevent="emit('select', batch.id)"
+          @keydown.space.prevent="emit('select', batch.id)"
         >
           <td>{{ batch.hypothesis }}</td>
           <td>{{ batch.notes }}</td>

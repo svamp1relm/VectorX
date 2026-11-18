@@ -5,7 +5,10 @@ business logic lives here. No auth, no websocket, no job queue.
 """
 
 import os
+from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,9 +44,10 @@ from vectorx.experiments.spec import (
     ExperimentSpec,
     HistoricalBacktestExperimentSpec,
     MonteCarloExperimentSpec,
+    parse_experiment_spec,
 )
 from vectorx.experiments.sweep import SweepSpec, generate_sweep_specs
-from vectorx.robustness.block_bootstrap import block_bootstrap_confidence_interval
+from vectorx.robustness.block_bootstrap import block_bootstrap_confidence_interval_by_run
 from vectorx.robustness.sensitivity import run_sensitivity_analysis
 from vectorx.robustness.walk_forward import generate_walk_forward_windows, run_walk_forward
 from vectorx.statistics.expectancy_comparison import (
@@ -52,7 +56,7 @@ from vectorx.statistics.expectancy_comparison import (
 from vectorx.statistics.expectancy_comparison import (
     compare_expectancy as build_expectancy_comparison,
 )
-from vectorx.statistics.risk_adjusted import compute_risk_adjusted_metrics
+from vectorx.statistics.risk_adjusted import compute_calmar_ratio, compute_risk_adjusted_metrics
 from vectorx.statistics.significance import significance_vs_zero
 from vectorx.statistics.versioning import ANALYSIS_VERSION
 from vectorx.storage.postgres.repository import PostgresExperimentRepository
@@ -60,10 +64,43 @@ from vectorx.storage.postgres.repository import PostgresExperimentRepository
 app = FastAPI(title="VectorX API")
 
 MAX_WALK_FORWARD_WINDOWS = 100
+MAX_BOOTSTRAP_WORK = 20_000_000
+
+
+def _resolve_api_data_path(path: str) -> str:
+    root = Path(
+        os.environ.get("VECTORX_DATA_ROOT", "configs/experiments/data")
+    ).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="CSV path is outside VECTORX_DATA_ROOT") from exc
+    return str(resolved)
+
+
+def _secure_experiment_spec(spec: ExperimentSpec) -> ExperimentSpec:
+    if isinstance(spec, HistoricalBacktestExperimentSpec):
+        return spec.model_copy(
+            update={
+                "data": spec.data.model_copy(
+                    update={"path": _resolve_api_data_path(spec.data.path)}
+                )
+            }
+        )
+    return spec
+
+
+def _secure_sweep(sweep: SweepSpec) -> SweepSpec:
+    base = _secure_experiment_spec(parse_experiment_spec(sweep.base))
+    return sweep.model_copy(update={"base": base.model_dump(mode="json")})
 
 
 class ExpectancyComparisonRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     monte_carlo_experiment_id: int
     historical_experiment_id: int
@@ -71,7 +108,7 @@ class ExpectancyComparisonRequest(BaseModel):
 
 
 class WalkForwardRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     base: HistoricalBacktestExperimentSpec
     start: AwareDatetime
@@ -108,9 +145,12 @@ async def domain_error_handler(_request: Request, exc: VectorXError) -> JSONResp
 
 
 def _get_experiment_or_404(
-    experiment_id: int, repo: PostgresExperimentRepository
+    experiment_id: int,
+    repo: PostgresExperimentRepository,
+    *,
+    include_trades: bool = False,
 ):
-    result = repo.get_experiment(experiment_id)
+    result = repo.get_experiment(experiment_id, include_trades=include_trades)
     if result is None:
         raise HTTPException(status_code=404, detail="experiment not found")
     return result
@@ -127,10 +167,9 @@ def _expectancy_snapshot(result):
 def create_experiment(
     spec: ExperimentSpec, repo: PostgresExperimentRepository = Depends(get_repository)
 ) -> dict:
-    result = run_experiment(spec)
+    result = run_experiment(_secure_experiment_spec(spec))
     experiment_id = repo.save_experiment(result)
-    stored = _get_experiment_or_404(experiment_id, repo)
-    return experiment_detail_to_dict(experiment_id, stored)
+    return experiment_detail_to_dict(experiment_id, result)
 
 
 @app.post("/experiments/{experiment_id}/run", status_code=201)
@@ -140,17 +179,21 @@ def rerun_experiment(
     existing = _get_experiment_or_404(experiment_id, repo)
     result = run_experiment(existing.spec)
     new_id = repo.save_experiment(result)
-    stored = _get_experiment_or_404(new_id, repo)
-    return experiment_detail_to_dict(new_id, stored)
+    return experiment_detail_to_dict(new_id, result)
 
 
 @app.get("/experiments")
 def list_experiments(
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, gt=0, le=100),
     repo: PostgresExperimentRepository = Depends(get_repository),
 ) -> list[dict]:
     return [
-        experiment_summary_to_dict(experiment_id, repo.get_experiment(experiment_id))
-        for experiment_id in repo.list_experiment_ids()
+        experiment_summary_to_dict(experiment_id, result)
+        for experiment_id, result in repo.list_experiment_summaries(
+            offset=offset,
+            limit=limit,
+        )
     ]
 
 
@@ -164,10 +207,14 @@ def get_experiment(
 
 @app.get("/experiments/{experiment_id}/results")
 def get_experiment_results(
-    experiment_id: int, repo: PostgresExperimentRepository = Depends(get_repository)
+    experiment_id: int,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, gt=0, le=100),
+    repo: PostgresExperimentRepository = Depends(get_repository),
 ) -> list[dict]:
     result = _get_experiment_or_404(experiment_id, repo)
-    return [run_result_to_dict(run, include_equity=False) for run in result.run_results]
+    runs = result.run_results[offset : offset + limit]
+    return [run_result_to_dict(run, include_equity=False) for run in runs]
 
 
 def _find_run_or_404(result, run_id: int):
@@ -227,10 +274,11 @@ def _get_batch_or_404(batch_id: int, repo: PostgresExperimentRepository):
 
 
 def _batch_detail(batch, repo: PostgresExperimentRepository) -> dict:
-    experiments = [
-        experiment_summary_to_dict(experiment_id, repo.get_experiment(experiment_id))
-        for experiment_id in batch.experiment_ids
-    ]
+    experiments = []
+    for experiment_id in batch.experiment_ids:
+        result = repo.get_experiment_summary(experiment_id)
+        if result is not None:
+            experiments.append(experiment_summary_to_dict(experiment_id, result))
     return batch_detail_to_dict(batch, experiments)
 
 
@@ -239,10 +287,12 @@ def create_batch(
     sweep: SweepSpec, repo: PostgresExperimentRepository = Depends(get_repository)
 ) -> dict:
     specs = generate_sweep_specs(sweep)
-    batch_id = repo.save_batch(hypothesis=sweep.hypothesis, notes=sweep.notes)
-    for spec in specs:
-        result = run_experiment(spec)
-        repo.save_experiment(result, batch_id=batch_id)
+    results = tuple(run_experiment(_secure_experiment_spec(spec)) for spec in specs)
+    batch_id = repo.save_batch_with_experiments(
+        hypothesis=sweep.hypothesis,
+        notes=sweep.notes,
+        results=results,
+    )
 
     batch = _get_batch_or_404(batch_id, repo)
     return _batch_detail(batch, repo)
@@ -250,9 +300,7 @@ def create_batch(
 
 @app.get("/batches")
 def list_batches(repo: PostgresExperimentRepository = Depends(get_repository)) -> list[dict]:
-    return [
-        batch_summary_to_dict(repo.get_batch(batch_id)) for batch_id in repo.list_batch_ids()
-    ]
+    return [batch_summary_to_dict(batch) for batch in repo.list_batches()]
 
 
 @app.get("/batches/{batch_id}")
@@ -266,42 +314,78 @@ def get_batch(
 @app.get("/experiments/{experiment_id}/analysis")
 def get_analysis(
     experiment_id: int,
-    seed: int = 0,
-    confidence: float = 0.95,
+    seed: int = Query(default=0, ge=0),
+    confidence: float = Query(default=0.95, gt=0.0, lt=1.0),
     repo: PostgresExperimentRepository = Depends(get_repository),
 ) -> dict:
-    result = _get_experiment_or_404(experiment_id, repo)
+    result = _get_experiment_or_404(experiment_id, repo, include_trades=True)
     if result.run_trades is None:
         raise AnalysisUnavailableError(
             "experiment was not saved with storage.store_trades=true; no raw trades to analyze"
         )
 
+    sample_size = sum(len(run_trades) for run_trades in result.run_trades)
+    if sample_size * 2000 > MAX_BOOTSTRAP_WORK:
+        raise ExperimentTooLargeError(
+            f"analysis work budget exceeded: {sample_size} trades * 2000 resamples"
+        )
     r_multiples = [
         trade.r_multiple for run_trades in result.run_trades for trade in run_trades
     ]
+    net_r_multiples = [
+        trade.net_r_multiple if trade.net_r_multiple is not None else trade.r_multiple
+        for run_trades in result.run_trades
+        for trade in run_trades
+    ]
     significance = significance_vs_zero(r_multiples, seed=seed, confidence=confidence)
+    significance_net = significance_vs_zero(net_r_multiples, seed=seed, confidence=confidence)
+    max_drawdown = max(run.metrics.max_drawdown for run in result.run_results)
     risk_adjusted = compute_risk_adjusted_metrics(
         r_multiples,
         total_return=result.summary.mean_total_return,
-        max_drawdown=max(run.metrics.max_drawdown for run in result.run_results),
+        max_drawdown=max_drawdown,
     )
+    risk_adjusted_net = compute_risk_adjusted_metrics(
+        net_r_multiples,
+        total_return=result.summary.mean_total_return,
+        max_drawdown=max_drawdown,
+    )
+    if len(result.run_results) > 1:
+        risk_adjusted = replace(risk_adjusted, calmar=None)
+        risk_adjusted_net = replace(risk_adjusted_net, calmar=None)
+    calmar_by_run = [
+        {
+            "run_index": run.run_index,
+            "calmar": compute_calmar_ratio(
+                run.metrics.total_return,
+                run.metrics.max_drawdown,
+            ),
+        }
+        for run in result.run_results
+    ]
     return {
         "analysis_version": ANALYSIS_VERSION,
         "confidence_interval": confidence_interval_to_dict(significance.ci),
         "risk_adjusted": risk_adjusted_metrics_to_dict(risk_adjusted),
         "significance_vs_zero": significance_result_to_dict(significance),
+        "confidence_interval_net": confidence_interval_to_dict(significance_net.ci),
+        "risk_adjusted_net": risk_adjusted_metrics_to_dict(risk_adjusted_net),
+        "significance_vs_zero_net": significance_result_to_dict(significance_net),
+        "calmar_by_run": calmar_by_run,
     }
 
 
 @app.post("/out-of-sample")
 def create_out_of_sample(spec: OutOfSampleSpec) -> dict:
-    result = run_out_of_sample(spec)
+    base = _secure_experiment_spec(spec.base)
+    assert isinstance(base, HistoricalBacktestExperimentSpec)
+    result = run_out_of_sample(spec.model_copy(update={"base": base}))
     return out_of_sample_result_to_dict(result)
 
 
 @app.post("/robustness/sensitivity")
 def create_sensitivity_analysis(sweep: SweepSpec) -> dict:
-    return sensitivity_result_to_dict(run_sensitivity_analysis(sweep))
+    return sensitivity_result_to_dict(run_sensitivity_analysis(_secure_sweep(sweep)))
 
 
 @app.post("/robustness/walk-forward")
@@ -322,8 +406,10 @@ def create_walk_forward(spec: WalkForwardRequest) -> dict:
             f"walk-forward would generate {len(windows)} windows, exceeding the "
             f"limit of {MAX_WALK_FORWARD_WINDOWS}"
         )
+    base = _secure_experiment_spec(spec.base)
+    assert isinstance(base, HistoricalBacktestExperimentSpec)
     results = run_walk_forward(
-        spec.base,
+        base,
         windows,
         reference_risk_fraction=spec.reference_risk_fraction,
     )
@@ -334,21 +420,35 @@ def create_walk_forward(spec: WalkForwardRequest) -> dict:
 def get_block_bootstrap(
     experiment_id: int,
     block_size: int = Query(gt=0),
-    seed: int = 0,
+    seed: int = Query(default=0, ge=0),
     confidence: float = Query(default=0.95, gt=0.0, lt=1.0),
     n_resamples: int = Query(default=2000, gt=0, le=20_000),
+    cost_basis: Literal["gross_r", "net_r"] = "gross_r",
     repo: PostgresExperimentRepository = Depends(get_repository),
 ) -> dict:
-    result = _get_experiment_or_404(experiment_id, repo)
+    result = _get_experiment_or_404(experiment_id, repo, include_trades=True)
     if result.run_trades is None:
         raise AnalysisUnavailableError(
             "experiment was not saved with storage.store_trades=true; no raw trades to analyze"
         )
-    r_multiples = [
-        trade.r_multiple for run_trades in result.run_trades for trade in run_trades
+    sample_size = sum(len(run_trades) for run_trades in result.run_trades)
+    if sample_size * n_resamples > MAX_BOOTSTRAP_WORK:
+        raise ExperimentTooLargeError(
+            f"bootstrap work budget exceeded: {sample_size} trades * {n_resamples} resamples"
+        )
+    run_values = [
+        [
+            (
+                trade.net_r_multiple
+                if cost_basis == "net_r" and trade.net_r_multiple is not None
+                else trade.r_multiple
+            )
+            for trade in run_trades
+        ]
+        for run_trades in result.run_trades
     ]
-    interval = block_bootstrap_confidence_interval(
-        r_multiples,
+    interval = block_bootstrap_confidence_interval_by_run(
+        run_values,
         block_size=block_size,
         seed=seed,
         confidence=confidence,
@@ -357,6 +457,7 @@ def get_block_bootstrap(
     return {
         "analysis_version": ANALYSIS_VERSION,
         "block_size": block_size,
+        "cost_basis": cost_basis,
         "confidence_interval": confidence_interval_to_dict(interval),
     }
 

@@ -2,7 +2,8 @@
 
 `all_r_multiples` is accepted as an already-flattened sequence so the caller
 (the experiment runner, Phase 7) can stream trades in and discard them
-immediately after — raw `Trade[]` are never retained here or in storage.
+immediately after — this aggregator never retains raw `Trade[]`. Optional
+raw-trade persistence belongs to `ExperimentResult` and the repository.
 """
 
 import statistics

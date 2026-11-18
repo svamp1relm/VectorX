@@ -9,6 +9,8 @@ a candidate strategy's significance against: "better than buy-and-hold" and
 typically need before trusting a strategy's edge.
 """
 
+from math import isfinite
+
 import numpy as np
 
 from vectorx.core.errors import InvalidModelParametersError
@@ -21,9 +23,14 @@ class BuyAndHoldStrategy:
     force-closes the position at the end of the data)."""
 
     def __init__(self, stop_loss_pct: float) -> None:
+        if not isfinite(stop_loss_pct):
+            raise InvalidModelParametersError("stop_loss_pct must be finite")
         if stop_loss_pct <= 0.0:
             raise InvalidModelParametersError(f"stop_loss_pct must be > 0, got {stop_loss_pct}")
         self.stop_loss_pct = stop_loss_pct
+        self._has_bought = False
+
+    def reset_position(self) -> None:
         self._has_bought = False
 
     def on_candle(self, candle: MarketCandle) -> Signal:
@@ -49,6 +56,10 @@ class RandomEntryStrategy:
         entry_probability: float = 0.1,
         exit_probability: float = 0.1,
     ) -> None:
+        if not all(isfinite(value) for value in (stop_loss_pct, entry_probability, exit_probability)):
+            raise InvalidModelParametersError("strategy parameters must be finite")
+        if seed < 0:
+            raise InvalidModelParametersError(f"seed must be >= 0, got {seed}")
         if stop_loss_pct <= 0.0:
             raise InvalidModelParametersError(f"stop_loss_pct must be > 0, got {stop_loss_pct}")
         if not 0.0 < entry_probability <= 1.0:
@@ -63,6 +74,9 @@ class RandomEntryStrategy:
         self._entry_probability = entry_probability
         self._exit_probability = exit_probability
         self._rng = np.random.default_rng(seed)
+        self._in_position = False
+
+    def reset_position(self) -> None:
         self._in_position = False
 
     def on_candle(self, candle: MarketCandle) -> Signal:

@@ -15,6 +15,10 @@ JSONB-shape helper, not a general-purpose export format).
 """
 
 import json
+import math
+import platform
+from dataclasses import asdict
+from importlib.metadata import version as package_version
 
 from vectorx.core.types import ExpectancyComparison, ExpectancyEstimate, ExperimentSummary
 from vectorx.experiments.batch import ExperimentBatch
@@ -74,6 +78,25 @@ def _summary_to_dict(summary: ExperimentSummary) -> dict:
     }
 
 
+def _json_safe(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return "Infinity" if value > 0 else "-Infinity" if math.isinf(value) else "NaN"
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _run_result_to_dict(run) -> dict:
+    return {
+        "run_index": run.run_index,
+        "derived_seed": run.derived_seed,
+        "metrics": _json_safe(asdict(run.metrics)),
+        "equity_curve": _json_safe(asdict(run)["equity_curve"]),
+    }
+
+
 def build_experiment_report(
     result: ExperimentResult, *, batch: ExperimentBatch | None = None
 ) -> dict:
@@ -89,8 +112,14 @@ def build_experiment_report(
         "data_version": result.data_version,
         "experiment_version": result.experiment_version,
         "analysis_version": ANALYSIS_VERSION,
+        "environment": {
+            "python": platform.python_version(),
+            "numpy": package_version("numpy"),
+            "pydantic": package_version("pydantic"),
+        },
         "spec": result.spec.model_dump(mode="json"),
         "summary": _summary_to_dict(result.summary),
+        "run_results": [_run_result_to_dict(run) for run in result.run_results],
         "hypothesis": batch.hypothesis if batch is not None else None,
         "notes": batch.notes if batch is not None else None,
     }
@@ -137,6 +166,16 @@ def render_markdown_report(
         "## Summary",
         "```json",
         json.dumps(report["summary"], sort_keys=True, indent=2),
+        "```",
+        "",
+        "## Environment",
+        "```json",
+        json.dumps(report["environment"], sort_keys=True, indent=2),
+        "```",
+        "",
+        "## Runs",
+        "```json",
+        json.dumps(report["run_results"], sort_keys=True, indent=2),
         "```",
         "",
     ]

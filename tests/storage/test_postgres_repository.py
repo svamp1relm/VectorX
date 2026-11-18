@@ -224,3 +224,41 @@ def test_list_batch_ids_reflects_insertion_order(clean_postgres_engine):
     id_b = repo.save_batch(hypothesis="b", notes=None)
 
     assert repo.list_batch_ids() == (id_a, id_b)
+
+
+def test_migrations_downgrade_to_base_and_upgrade_back_to_head(postgres_url):
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "alembic"))
+
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+
+def test_summary_reads_do_not_query_raw_trades(clean_postgres_engine):
+    from sqlalchemy import event
+
+    repo = PostgresExperimentRepository(clean_postgres_engine)
+    spec = _spec(storage={"store_trades": True})
+    experiment_id = repo.save_experiment(run_experiment(spec))
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(clean_postgres_engine, "before_cursor_execute", capture)
+    try:
+        summary = repo.get_experiment_summary(experiment_id)
+        listed = repo.list_experiment_summaries()
+    finally:
+        event.remove(clean_postgres_engine, "before_cursor_execute", capture)
+
+    assert summary is not None
+    assert summary.run_trades is None
+    assert len(listed) == 1
+    assert not any("trades" in statement.lower() for statement in statements)

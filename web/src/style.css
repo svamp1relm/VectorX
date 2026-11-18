@@ -107,7 +107,21 @@ input:focus-visible {
 
 .segmented-control {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+section {
+  overflow-x: auto;
+}
+
+.chart-data {
+  margin: 8px 0 24px;
+}
+
+tbody tr:focus {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
 }
 
 .segmented-control button {
@@ -203,5 +217,9 @@ p {
 
   .preferences {
     justify-content: flex-start;
+  }
+
+  dl {
+    grid-template-columns: 1fr;
   }
 }

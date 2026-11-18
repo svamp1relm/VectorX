@@ -33,7 +33,8 @@ from vectorx.experiments.spec import (
     RandomEntryStrategySpec,
 )
 from vectorx.experiments.versioning import EXPERIMENT_VERSION, get_code_version
-from vectorx.marketdata.csv_source import CsvDataSource, compute_data_version
+from vectorx.marketdata.csv_source import CsvDataSource
+from vectorx.marketdata.types import MarketData
 from vectorx.marketdata.validation import validate_market_data
 from vectorx.simulation.monte_carlo import generate_trades
 from vectorx.simulation.portfolio import downsample_equity_curve, simulate_portfolio
@@ -49,6 +50,9 @@ logger = logging.getLogger(__name__)
 
 MAX_OPERATIONS = 2_000_000
 """Pre-flight limit on runs * n_trades for one Monte Carlo experiment (MVP safety guard)."""
+
+MAX_MONTE_CARLO_RUNS = 10_000
+"""Independent bound on stored run results, database rows, and UI response size."""
 
 MAX_HISTORICAL_CANDLES = 500_000
 """Limit on the number of candles a historical backtest experiment may load.
@@ -78,15 +82,30 @@ class ExperimentResult:
     summary: ExperimentSummary
 
 
-def run_experiment(spec: ExperimentSpec) -> ExperimentResult:
+def run_experiment(
+    spec: ExperimentSpec,
+    *,
+    trade_start: datetime | None = None,
+    market_data: MarketData | None = None,
+    data_version: str | None = None,
+) -> ExperimentResult:
     """Dispatch to the Monte Carlo or historical backtest runner by `spec.type`."""
     if isinstance(spec, MonteCarloExperimentSpec):
         return _run_monte_carlo_experiment(spec)
-    return _run_historical_backtest_experiment(spec)
+    return _run_historical_backtest_experiment(
+        spec,
+        trade_start=trade_start,
+        market_data=market_data,
+        data_version=data_version,
+    )
 
 
 def _run_monte_carlo_experiment(spec: MonteCarloExperimentSpec) -> ExperimentResult:
     """Run `spec.runs` Monte Carlo runs and aggregate them into a summary."""
+    if spec.runs > MAX_MONTE_CARLO_RUNS:
+        raise ExperimentTooLargeError(
+            f"runs={spec.runs} exceeds the limit of {MAX_MONTE_CARLO_RUNS}"
+        )
     n_operations = spec.runs * spec.model.n_trades
     if n_operations > MAX_OPERATIONS:
         raise ExperimentTooLargeError(
@@ -198,6 +217,10 @@ def _build_strategy(strategy_spec: HistoricalStrategySpec, seed: int) -> Strateg
 
 def _run_historical_backtest_experiment(
     spec: HistoricalBacktestExperimentSpec,
+    *,
+    trade_start: datetime | None = None,
+    market_data: MarketData | None = None,
+    data_version: str | None = None,
 ) -> ExperimentResult:
     """Run one deterministic historical backtest pass over `spec.data`/`spec.strategy`."""
     logger.info(
@@ -206,21 +229,19 @@ def _run_historical_backtest_experiment(
     created_at = datetime.now(UTC)
     started_at = time.perf_counter()
 
-    data_source = CsvDataSource(
-        path=spec.data.path, symbol=spec.data.symbol, timeframe=spec.data.timeframe
-    )
-    market_data = data_source.load()
-    validate_market_data(market_data)
-    data_version = compute_data_version(spec.data.path)
-
-    if len(market_data.candles) > MAX_HISTORICAL_CANDLES:
-        raise ExperimentTooLargeError(
-            f"candle count={len(market_data.candles)} exceeds the MVP limit of "
-            f"{MAX_HISTORICAL_CANDLES}"
+    if market_data is None:
+        data_source = CsvDataSource(
+            path=spec.data.path, symbol=spec.data.symbol, timeframe=spec.data.timeframe
         )
+        market_data, data_version = data_source.load_with_version(
+            max_candles=MAX_HISTORICAL_CANDLES
+        )
+    if data_version is None:
+        raise ValueError("data_version is required with in-memory market_data")
+    validate_market_data(market_data)
 
     strategy = _build_strategy(spec.strategy, spec.seed)
-    trades = run_historical_backtest(market_data, strategy)
+    trades = run_historical_backtest(market_data, strategy, trade_start=trade_start)
 
     portfolio_result = simulate_portfolio(
         trades=trades,

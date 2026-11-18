@@ -27,7 +27,9 @@ from vectorx.statistics.significance import SignificanceResult
 from vectorx.statistics.versioning import ANALYSIS_VERSION
 
 
-def _json_safe_float(value: float) -> float | str:
+def _json_safe_float(value: float | None) -> float | str | None:
+    if value is None:
+        return None
     if math.isinf(value):
         return "Infinity" if value > 0 else "-Infinity"
     if math.isnan(value):
@@ -107,6 +109,9 @@ def _metrics_to_dict(metrics: Metrics) -> dict:
         "stdev": metrics.stdev,
         "max_drawdown": metrics.max_drawdown,
         "profit_factor": _json_safe_float(metrics.profit_factor),
+        "expectancy_sample_net": metrics.expectancy_sample_net,
+        "win_rate_net": metrics.win_rate_net,
+        "profit_factor_net": _json_safe_float(metrics.profit_factor_net),
         "ruined": metrics.ruined,
     }
 
@@ -233,13 +238,37 @@ def _run_experiment_result_to_dict(result: ExperimentResult) -> dict:
     }
 
 
+def _out_of_sample_experiment_to_dict(experiment, result, start, end) -> dict:
+    payload = _run_experiment_result_to_dict(experiment)
+    payload["spec"] = result.source.base.model_dump(mode="json")
+    payload["data_version"] = experiment.data_version
+    payload["source_data_version"] = result.source_data_version
+    payload["time_range"] = {"start": start.isoformat(), "end": end.isoformat()}
+    payload["warmup_start"] = result.data_start.isoformat()
+    payload["executable_spec"] = False
+    return payload
+
+
 def out_of_sample_result_to_dict(result) -> dict:
+    source = result.source
     return {
-        "train": _run_experiment_result_to_dict(result.train),
-        "test": _run_experiment_result_to_dict(result.test),
+        "train": _out_of_sample_experiment_to_dict(
+            result.train, result, source.train_start, source.train_end
+        ),
+        "test": _out_of_sample_experiment_to_dict(
+            result.test, result, source.test_start, source.test_end
+        ),
         "comparison": {
-            "train": _expectancy_estimate_to_dict(result.comparison.train),
-            "test": _expectancy_estimate_to_dict(result.comparison.test),
+            "train": (
+                _expectancy_estimate_to_dict(result.comparison.train)
+                if result.comparison.train is not None
+                else None
+            ),
+            "test": (
+                _expectancy_estimate_to_dict(result.comparison.test)
+                if result.comparison.test is not None
+                else None
+            ),
             "risk_compatibility": _risk_compatibility_to_dict(result.comparison.risk_compatibility),
             "delta_train_test": result.comparison.delta_train_test,
             "warnings": list(result.comparison.warnings),
@@ -255,6 +284,8 @@ def sensitivity_result_to_dict(result) -> dict:
                 "params": point.params,
                 "expectancy_sample": point.expectancy_sample,
                 "sharpe": point.sharpe,
+                "expectancy_sample_net": point.expectancy_sample_net,
+                "sharpe_net": point.sharpe_net,
             }
             for point in result.points
         ],

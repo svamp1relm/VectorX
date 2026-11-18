@@ -94,12 +94,37 @@ export interface HistoricalDataSpec {
   timeframe: string
 }
 
-export interface HistoricalStrategySpec {
-  type: string
-  fast_period: number
-  slow_period: number
+interface StrategyRiskSpec {
   stop_loss_pct: number
 }
+
+export interface MovingAverageCrossoverStrategySpec extends StrategyRiskSpec {
+  type: 'moving_average_crossover'
+  fast_period: number
+  slow_period: number
+}
+
+export interface BuyAndHoldStrategySpec extends StrategyRiskSpec {
+  type: 'buy_and_hold'
+}
+
+export interface RandomEntryStrategySpec extends StrategyRiskSpec {
+  type: 'random_entry'
+  entry_probability: number
+  exit_probability: number
+}
+
+export interface BreakoutStrategySpec extends StrategyRiskSpec {
+  type: 'breakout'
+  entry_lookback: number
+  exit_lookback: number
+}
+
+export type HistoricalStrategySpec =
+  | MovingAverageCrossoverStrategySpec
+  | BuyAndHoldStrategySpec
+  | RandomEntryStrategySpec
+  | BreakoutStrategySpec
 
 export interface HistoricalBacktestExperimentSpec {
   type: 'historical_backtest'
@@ -154,18 +179,21 @@ export interface Metrics {
   trades: number
   wins: number
   losses: number
-  win_rate: number
-  avg_win: number
-  avg_loss: number
+  win_rate: number | null
+  avg_win: number | null
+  avg_loss: number | null
   expectancy_theoretical: number | null
-  expectancy_sample: number
+  expectancy_sample: number | null
   total_return: number
-  avg_trade: number
-  variance: number
-  stdev: number
+  avg_trade: number | null
+  variance: number | null
+  stdev: number | null
   max_drawdown: number
-  profit_factor: number | string
+  profit_factor: number | string | null
   ruined: boolean
+  expectancy_sample_net?: number | null
+  win_rate_net?: number | null
+  profit_factor_net?: number | string | null
 }
 
 export interface EquityPoint {
@@ -200,6 +228,10 @@ export interface AnalysisResult {
   confidence_interval: ConfidenceInterval
   risk_adjusted: RiskAdjustedMetrics
   significance_vs_zero: { ci: ConfidenceInterval; significant: boolean }
+  confidence_interval_net?: ConfidenceInterval
+  risk_adjusted_net?: RiskAdjustedMetrics
+  significance_vs_zero_net?: { ci: ConfidenceInterval; significant: boolean }
+  calmar_by_run?: { run_index: number; calmar: number | null }[]
 }
 
 export interface BatchSummary {
@@ -247,14 +279,19 @@ export interface OutOfSampleExperimentView {
   status: string
   spec: ExperimentSpec
   summary: ExperimentSummary
+  data_version?: string
+  source_data_version?: string
+  time_range?: { start: string; end: string }
+  warmup_start?: string
+  executable_spec?: boolean
 }
 
 export interface OutOfSampleResult {
   train: OutOfSampleExperimentView
   test: OutOfSampleExperimentView
   comparison: {
-    train: ExpectancyEstimateLite
-    test: ExpectancyEstimateLite
+    train: ExpectancyEstimateLite | null
+    test: ExpectancyEstimateLite | null
     risk_compatibility: RiskCompatibility
     delta_train_test: number | null
     warnings: string[]
@@ -269,8 +306,10 @@ export interface SensitivityRequest {
 
 export interface SensitivityPoint {
   params: Record<string, unknown>
-  expectancy_sample: number
+  expectancy_sample: number | null
   sharpe: number | null
+  expectancy_sample_net?: number | null
+  sharpe_net?: number | null
 }
 
 export interface SensitivityResult {
@@ -308,10 +347,12 @@ export interface BlockBootstrapRequest {
   seed: number
   confidence: number
   nResamples: number
+  costBasis?: 'gross_r' | 'net_r'
 }
 
 export interface BlockBootstrapResult {
   analysis_version: number
   block_size: number
+  cost_basis?: 'gross_r' | 'net_r'
   confidence_interval: ConfidenceInterval
 }

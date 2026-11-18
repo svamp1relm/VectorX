@@ -25,6 +25,11 @@ class RiskAdjustedMetrics:
     calmar: float | None
 
 
+def compute_calmar_ratio(total_return: float, max_drawdown: float) -> float | None:
+    """Compute one run's return/drawdown ratio, or None when drawdown is zero."""
+    return total_return / max_drawdown if max_drawdown > 0.0 else None
+
+
 def compute_risk_adjusted_metrics(
     r_multiples: Sequence[float], total_return: float, max_drawdown: float
 ) -> RiskAdjustedMetrics:
@@ -42,6 +47,6 @@ def compute_risk_adjusted_metrics(
     downside_deviation = math.sqrt(downside_variance)
     sortino = mean_r / downside_deviation if downside_deviation > 0.0 else None
 
-    calmar = total_return / max_drawdown if max_drawdown > 0.0 else None
+    calmar = compute_calmar_ratio(total_return, max_drawdown)
 
     return RiskAdjustedMetrics(sharpe=sharpe, sortino=sortino, calmar=calmar)

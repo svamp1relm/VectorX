@@ -37,3 +37,13 @@ def test_loss_r_must_be_strictly_negative():
         validate_model_parameters(p_win=0.5, win_r=2.0, loss_r=0.0)
     with pytest.raises(InvalidModelParametersError):
         validate_model_parameters(p_win=0.5, win_r=2.0, loss_r=1.0)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("field", ["p_win", "win_r", "loss_r"])
+def test_non_finite_parameters_are_rejected(field, value):
+    parameters = {"p_win": 0.5, "win_r": 2.0, "loss_r": -1.0}
+    parameters[field] = value
+
+    with pytest.raises(InvalidModelParametersError):
+        validate_model_parameters(**parameters)
