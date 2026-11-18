@@ -5,9 +5,10 @@ import BatchesList from './components/BatchesList.vue'
 import ExperimentDetail from './components/ExperimentDetail.vue'
 import ExperimentsList from './components/ExperimentsList.vue'
 import OutOfSampleView from './components/OutOfSampleView.vue'
+import RobustnessView from './components/RobustnessView.vue'
 import { usePreferences } from './preferences'
 
-type View = 'experiments' | 'batches' | 'out-of-sample'
+type View = 'experiments' | 'batches' | 'out-of-sample' | 'robustness'
 
 const view = ref<View>('experiments')
 const selectedId = ref<number | null>(null)
@@ -31,6 +32,12 @@ function showOutOfSample() {
   selectedId.value = null
   selectedBatchId.value = null
 }
+
+function showRobustness() {
+  view.value = 'robustness'
+  selectedId.value = null
+  selectedBatchId.value = null
+}
 </script>
 
 <template>
@@ -50,6 +57,9 @@ function showOutOfSample() {
           </button>
           <button type="button" :class="{ active: view === 'out-of-sample' }" @click="showOutOfSample">
             {{ t('oos.title') }}
+          </button>
+          <button type="button" :class="{ active: view === 'robustness' }" @click="showRobustness">
+            {{ t('robustness.title') }}
           </button>
         </div>
       </nav>
@@ -117,7 +127,8 @@ function showOutOfSample() {
         "
       />
     </template>
-    <OutOfSampleView v-else />
+    <OutOfSampleView v-else-if="view === 'out-of-sample'" />
+    <RobustnessView v-else />
   </main>
 </template>
 

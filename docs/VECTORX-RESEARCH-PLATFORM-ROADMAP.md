@@ -11,6 +11,8 @@
 (generalization litmus test) и Фаза 23 (unification pass) сделаны тоже.
 309 backend тестов + 42 frontend теста зелёные, `ruff check .` и `vue-tsc --noEmit`
 чисты. Детали реализации — в конце каждой фазы ниже.
+Фаза 25 (Robustness API + Dashboard) реализована 2026-11-18: все три robustness-проверки
+доступны через HTTP и отдельную вкладку UI.
 
 ---
 
@@ -508,3 +510,35 @@ Kafka/Kubernetes, ML, short-позиции) плюс:
 ## Статус
 
 Roadmap согласован (2026-10-02). К реализации Фазы 18a переход только по явной команде пользователя.
+
+---
+
+## Фаза 25 — Robustness API + Dashboard ✅
+
+**Сделано 2026-11-18.** Вычислительные алгоритмы Фазы 21 открыты через тонкие HTTP/UI-адаптеры
+без новой simulation/statistics pipeline, таблиц БД и внешних зависимостей.
+
+### API
+
+- `POST /robustness/sensitivity` принимает существующий `SweepSpec` и возвращает
+  `analysis_version` + точки `{params, expectancy_sample, sharpe}`. Действует существующий
+  лимит 100 комбинаций; эксперименты и batches в БД не создаются.
+- `POST /robustness/walk-forward` принимает historical `base`, общие `start`/`end`, длины
+  train/test/step в днях и `reference_risk_fraction`. Пустой набор окон и более 100 окон
+  отклоняются до запуска с 400. Каждый результат содержит границы окна и обычный OOS comparison.
+- `GET /experiments/{id}/robustness/block-bootstrap` принимает `block_size`, `seed`,
+  `confidence`, `n_resamples` (до 20 000), использует сохранённые raw trades и возвращает
+  `analysis_version`, `block_size`, `ConfidenceInterval`. Без raw trades — 400, без эксперимента — 404.
+
+Все результаты derived и не персистятся. Запросы синхронные, как существующие experiment/batch/OOS
+операции. `experiment_version` и `analysis_version` не меняются, поскольку численные алгоритмы
+остались прежними.
+
+### Dashboard
+
+Новая вкладка **Robustness** содержит формы и результаты для всех трёх проверок: таблица
+parameter sensitivity, таблица walk-forward окон с train/test expectancy и delta, point estimate
+и границы block-bootstrap CI. Добавлены EN/RU-переводы, loading/disabled/error-состояния и
+понятные ошибки для Monte Carlo walk-forward и экспериментов без raw trades. Frontend не
+пересчитывает robustness-статистику. Heatmap, walk-forward chart и автоматический выбор лучших
+параметров сознательно остаются за пределами этой фазы.

@@ -11,13 +11,13 @@ Platform v1"**. Что уже реализовано:
   (MA Crossover / Breakout / Buy&Hold / Random-entry на CSV OHLCV).
 - Статистика: bootstrap confidence intervals, significance tests, Sharpe/Sortino/Calmar.
 - Out-of-sample валидация (train/test split) и parameter sweep батчи под общей гипотезой.
-- Robustness testing (parameter sensitivity, walk-forward, block bootstrap) —
-  реализовано и протестировано в `src/vectorx/robustness/`; пока доступно только из
-  Python (сознательно без API/UI в этом релизе).
+- Robustness testing (parameter sensitivity, walk-forward, block bootstrap) — из Python,
+  через API и вкладку **Robustness** в Dashboard. Для block bootstrap эксперимент должен
+  быть сохранён с `storage.store_trades=true`.
 - Воспроизводимый экспорт эксперимента (JSON/Markdown) с полным provenance
   (code_version, data_version, experiment_version, analysis_version, seed).
 - Dashboard (Vue 3): список/детали экспериментов, equity/histogram графики, batches,
-  out-of-sample, сравнение Monte Carlo vs historical, тёмная/светлая тема, EN/RU.
+  out-of-sample, robustness, сравнение Monte Carlo vs historical, тёмная/светлая тема, EN/RU.
 
 Документация по этапам (зафиксированные архитектурные решения, не переоткрывать):
 
@@ -48,15 +48,27 @@ pip install -e ".[postgres,api,dev]"
 ### Быстрый запуск (демо)
 
 ```bash
+source .venv/bin/activate
+# Нужно только если вы ранее вручную задавали переменные VectorX в этом терминале:
+unset VECTORX_POSTGRES_PORT VECTORX_DATABASE_URL VECTORX_API_PORT VECTORX_WEB_PORT
+unset VECTORX_CORS_ORIGINS VITE_API_BASE VECTORX_API_BASE
+
 ./scripts/demo-up.sh
 ./scripts/seed_demo.sh
 ```
 
 Первая команда поднимает Postgres (docker compose), накатывает миграции, запускает API
-и web в фоне; вторая наполняет интерфейс демонстрационными данными для всех вкладок:
+и web в фоне; вторая наполняет интерфейс демонстрационными данными для всех вкладок.
+По умолчанию используются порты, которые не конфликтуют с типичными локальными сервисами:
 
-- API — `http://127.0.0.1:8000`
-- Web — `http://127.0.0.1:5173`
+- PostgreSQL — `localhost:55432` (внутри контейнера — `5432`);
+- API — `http://127.0.0.1:8001`;
+- Web — `http://127.0.0.1:5173`.
+
+Если в активированном окружении заданы `http_proxy`/`https_proxy`, скрипты автоматически
+добавляют `localhost`, `127.0.0.1` и `::1` в `NO_PROXY`/`no_proxy`, чтобы локальные
+health-check и API-запросы не проходили через внешний proxy. Остальные proxy-настройки
+сохраняются.
 
 Логи фоновых процессов — `.demo/api.log`, `.demo/web.log`. Остановить:
 
@@ -66,16 +78,17 @@ pip install -e ".[postgres,api,dev]"
 
 Данные Postgres (docker volume) между показами сохраняются — `demo-down.sh` не удаляет volume.
 
-Если порт 5432 (или 8000) уже занят другим процессом на вашей машине, скрипт честно
+Если порт 55432 (или 8001) уже занят другим процессом на вашей машине, скрипт честно
 упадёт с ошибкой вместо того, чтобы тихо подключиться не туда. Переопределите порт и
 перезапустите:
 
 ```bash
-export VECTORX_POSTGRES_PORT=55432
-export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:55432/vectorx"
-# при конфликте на 8000 — аналогично export VECTORX_API_PORT=8001
+export VECTORX_POSTGRES_PORT=56432
+export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:${VECTORX_POSTGRES_PORT}/vectorx"
+# при конфликте на 8001 — например, export VECTORX_API_PORT=8002
 # при конфликте на 5173 — export VECTORX_WEB_PORT=5183 (порт также попадёт в CORS)
 ./scripts/demo-up.sh
+./scripts/seed_demo.sh
 ```
 
 См. также `.env.example` (`cp .env.example .env` + `export $(cat .env | xargs)`, либо
@@ -95,7 +108,8 @@ export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:5543
 2. Укажите адрес базы данных. Для выбранной выше конфигурации Docker:
 
    ```bash
-   export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:5432/vectorx"
+   export VECTORX_POSTGRES_PORT=55432
+   export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:55432/vectorx"
    ```
 
 3. Примените миграции:
@@ -114,16 +128,18 @@ export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:5543
    Исторический эксперимент создаётся одним детерминированным прогоном,
    а Monte Carlo-эксперимент — из указанных в YAML `runs`.
 
-5. В отдельном терминале запустите API с тем же `VECTORX_DATABASE_URL`:
+5. Запустите API с тем же `VECTORX_DATABASE_URL`:
 
    ```bash
    source .venv/bin/activate
-   uvicorn api.main:app --reload
+   export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:55432/vectorx"
+   uvicorn api.main:app --reload --port 8001
    ```
 
-   API будет доступен по адресу `http://127.0.0.1:8000`.
+   API будет доступен по адресу `http://127.0.0.1:8001`. Сервер работает в foreground
+   и занимает текущий терминал; для его остановки нажмите `Ctrl+C`.
 
-6. В третьем терминале запустите интерфейс:
+6. Не останавливая API, в другом терминале запустите интерфейс:
 
    ```bash
    cd web
@@ -131,7 +147,8 @@ export VECTORX_DATABASE_URL="postgresql+psycopg://vectorx:vectorx@localhost:5543
    npm run dev
    ```
 
-   Интерфейс будет доступен по адресу `http://127.0.0.1:5173`.
+   Интерфейс будет доступен по адресу `http://127.0.0.1:5173` и по умолчанию обратится
+   к API на порту `8001`.
 
 7. В интерфейсе откройте эксперимент. В разделе **Сравнение математического
    ожидания** выберите эксперимент противоположного типа, при необходимости

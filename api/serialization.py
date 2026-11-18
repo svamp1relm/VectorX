@@ -24,6 +24,7 @@ from vectorx.experiments.runner import ExperimentResult
 from vectorx.statistics.confidence import ConfidenceInterval
 from vectorx.statistics.risk_adjusted import RiskAdjustedMetrics
 from vectorx.statistics.significance import SignificanceResult
+from vectorx.statistics.versioning import ANALYSIS_VERSION
 
 
 def _json_safe_float(value: float) -> float | str:
@@ -243,4 +244,36 @@ def out_of_sample_result_to_dict(result) -> dict:
             "delta_train_test": result.comparison.delta_train_test,
             "warnings": list(result.comparison.warnings),
         },
+    }
+
+
+def sensitivity_result_to_dict(result) -> dict:
+    return {
+        "analysis_version": ANALYSIS_VERSION,
+        "points": [
+            {
+                "params": point.params,
+                "expectancy_sample": point.expectancy_sample,
+                "sharpe": point.sharpe,
+            }
+            for point in result.points
+        ],
+    }
+
+
+def walk_forward_result_to_dict(windows, results) -> dict:
+    return {
+        "analysis_version": ANALYSIS_VERSION,
+        "windows": [
+            {
+                "window": {
+                    "train_start": window.train_start.isoformat(),
+                    "train_end": window.train_end.isoformat(),
+                    "test_start": window.test_start.isoformat(),
+                    "test_end": window.test_end.isoformat(),
+                },
+                "result": out_of_sample_result_to_dict(result),
+            }
+            for window, result in zip(windows, results, strict=True)
+        ],
     }

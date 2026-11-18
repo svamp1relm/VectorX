@@ -415,3 +415,158 @@ def test_export_endpoint_returns_404_for_unknown_experiment(client):
     response = client.get("/experiments/999999/export")
 
     assert response.status_code == 404
+
+
+def test_sensitivity_endpoint_is_deterministic_and_does_not_persist(client):
+    before = client.get("/experiments").json()
+    payload = {
+        "hypothesis": "p_win sensitivity",
+        "base": VALID_SPEC,
+        "grid": {"model.p_win": [0.5, 0.55]},
+    }
+
+    response_a = client.post("/robustness/sensitivity", json=payload)
+    response_b = client.post("/robustness/sensitivity", json=payload)
+
+    assert response_a.status_code == 200
+    assert response_a.json() == response_b.json()
+    body = response_a.json()
+    assert body["analysis_version"] == 1
+    assert len(body["points"]) == 2
+    assert body["points"][0]["params"] == {"model.p_win": 0.5}
+    assert "expectancy_sample" in body["points"][0]
+    assert "sharpe" in body["points"][0]
+    assert client.get("/experiments").json() == before
+    assert client.get("/batches").json() == []
+
+
+def _walk_forward_payload(csv_path, **overrides):
+    payload = {
+        "base": {
+            "type": "historical_backtest",
+            "name": "walk_forward_api_test",
+            "data": {"path": str(csv_path), "symbol": "BTCUSDT", "timeframe": "1h"},
+            "strategy": {"type": "buy_and_hold", "stop_loss_pct": 1.0},
+            "portfolio": {"initial_capital": 10_000.0, "risk_per_trade": 0.1},
+        },
+        "start": "2024-01-01T00:00:00+00:00",
+        "end": "2024-01-03T11:00:00+00:00",
+        "train_window_days": 20 / 24,
+        "test_window_days": 10 / 24,
+        "step_days": 10 / 24,
+        "reference_risk_fraction": 0.01,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_walk_forward_endpoint_returns_one_result_per_window(client, tmp_path):
+    csv_path = _write_csv(tmp_path, [100.0 + i for i in range(60)])
+
+    response = client.post("/robustness/walk-forward", json=_walk_forward_payload(csv_path))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analysis_version"] == 1
+    assert len(body["windows"]) == 3
+    first = body["windows"][0]
+    assert first["window"]["train_start"] == "2024-01-01T00:00:00+00:00"
+    assert first["window"]["test_end"] == "2024-01-02T06:00:00.000001+00:00"
+    assert first["result"]["train"]["spec"]["type"] == "historical_backtest"
+    assert "delta_train_test" in first["result"]["comparison"]
+
+
+def test_walk_forward_endpoint_rejects_empty_window_set(client, tmp_path):
+    csv_path = _write_csv(tmp_path, [100.0 + i for i in range(60)])
+
+    response = client.post(
+        "/robustness/walk-forward",
+        json=_walk_forward_payload(csv_path, train_window_days=10),
+    )
+
+    assert response.status_code == 400
+
+
+def test_walk_forward_endpoint_rejects_more_than_100_windows_before_running(client, tmp_path):
+    csv_path = _write_csv(tmp_path, [100.0 + i for i in range(60)])
+
+    response = client.post(
+        "/robustness/walk-forward",
+        json=_walk_forward_payload(
+            csv_path,
+            train_window_days=1 / 24,
+            test_window_days=1 / 24,
+            step_days=1 / 1440,
+        ),
+    )
+
+    assert response.status_code == 400
+
+
+def test_walk_forward_endpoint_rejects_monte_carlo_base(client):
+    response = client.post(
+        "/robustness/walk-forward",
+        json=_walk_forward_payload("unused.csv", base=VALID_SPEC),
+    )
+
+    assert response.status_code == 422
+
+
+def test_block_bootstrap_endpoint_is_deterministic(client):
+    spec = {**VALID_SPEC, "storage": {"store_trades": True}}
+    created = client.post("/experiments", json=spec).json()
+
+    response_a = client.get(
+        f"/experiments/{created['id']}/robustness/block-bootstrap",
+        params={"block_size": 2, "seed": 7, "n_resamples": 50},
+    )
+    response_b = client.get(
+        f"/experiments/{created['id']}/robustness/block-bootstrap",
+        params={"block_size": 2, "seed": 7, "n_resamples": 50},
+    )
+
+    assert response_a.status_code == 200
+    assert response_a.json() == response_b.json()
+    body = response_a.json()
+    assert body["analysis_version"] == 1
+    assert body["block_size"] == 2
+    ci = body["confidence_interval"]
+    assert ci["lower"] <= ci["point_estimate"] <= ci["upper"]
+    assert ci["n_resamples"] == 50
+
+
+def test_block_bootstrap_endpoint_returns_400_when_trades_were_not_stored(client):
+    created = client.post("/experiments", json=VALID_SPEC).json()
+
+    response = client.get(
+        f"/experiments/{created['id']}/robustness/block-bootstrap",
+        params={"block_size": 2},
+    )
+
+    assert response.status_code == 400
+
+
+def test_block_bootstrap_endpoint_validates_inputs(client):
+    spec = {**VALID_SPEC, "storage": {"store_trades": True}}
+    created = client.post("/experiments", json=spec).json()
+
+    too_large_block = client.get(
+        f"/experiments/{created['id']}/robustness/block-bootstrap",
+        params={"block_size": 1000},
+    )
+    too_many_resamples = client.get(
+        f"/experiments/{created['id']}/robustness/block-bootstrap",
+        params={"block_size": 2, "n_resamples": 20_001},
+    )
+
+    assert too_large_block.status_code == 400
+    assert too_many_resamples.status_code == 422
+
+
+def test_block_bootstrap_endpoint_returns_404_for_unknown_experiment(client):
+    response = client.get(
+        "/experiments/999999/robustness/block-bootstrap",
+        params={"block_size": 2},
+    )
+
+    assert response.status_code == 404

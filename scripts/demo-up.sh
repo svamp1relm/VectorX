@@ -3,20 +3,26 @@
 # API (uvicorn) + web (vite dev), оба процесса в фоне с логами в .demo/.
 set -euo pipefail
 
+# Локальные health-check'и не должны идти через proxy из активированного окружения.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1"
+export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 RUN_DIR="$ROOT_DIR/.demo"
 mkdir -p "$RUN_DIR"
 
-: "${VECTORX_DATABASE_URL:=postgresql+psycopg://vectorx:vectorx@localhost:5432/vectorx}"
-: "${VECTORX_API_PORT:=8000}"
+: "${VECTORX_POSTGRES_PORT:=55432}"
+: "${VECTORX_DATABASE_URL:=postgresql+psycopg://vectorx:vectorx@localhost:${VECTORX_POSTGRES_PORT}/vectorx}"
+: "${VECTORX_API_PORT:=8001}"
 : "${VECTORX_WEB_PORT:=5173}"
 : "${VECTORX_CORS_ORIGINS:=http://localhost:${VECTORX_WEB_PORT},http://127.0.0.1:${VECTORX_WEB_PORT}}"
 # Если VECTORX_API_PORT переопределён, фронтенд должен узнать об этом тем же способом —
-# иначе он молча продолжит стучаться в дефолтный 8000 (Vite подхватывает VITE_* из env).
+# иначе он молча продолжит стучаться в дефолтный 8001 (Vite подхватывает VITE_* из env).
 : "${VITE_API_BASE:=http://127.0.0.1:${VECTORX_API_PORT}}"
-export VECTORX_DATABASE_URL VECTORX_CORS_ORIGINS VECTORX_API_PORT VECTORX_WEB_PORT VITE_API_BASE
+export VECTORX_POSTGRES_PORT VECTORX_DATABASE_URL VECTORX_CORS_ORIGINS
+export VECTORX_API_PORT VECTORX_WEB_PORT VITE_API_BASE
 
 demo_process_running() {
   local pid="$1" expected="$2" command_line state

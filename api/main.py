@@ -5,11 +5,12 @@ business logic lives here. No auth, no websocket, no job queue.
 """
 
 import os
+from datetime import timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from api.dependencies import get_repository
 from api.serialization import (
@@ -23,9 +24,16 @@ from api.serialization import (
     out_of_sample_result_to_dict,
     risk_adjusted_metrics_to_dict,
     run_result_to_dict,
+    sensitivity_result_to_dict,
     significance_result_to_dict,
+    walk_forward_result_to_dict,
 )
-from vectorx.core.errors import AnalysisUnavailableError, VectorXError
+from vectorx.core.errors import (
+    AnalysisUnavailableError,
+    ExperimentTooLargeError,
+    InvalidModelParametersError,
+    VectorXError,
+)
 from vectorx.experiments.export import render_json_report, render_markdown_report
 from vectorx.experiments.out_of_sample import OutOfSampleSpec, run_out_of_sample
 from vectorx.experiments.runner import run_experiment
@@ -35,6 +43,9 @@ from vectorx.experiments.spec import (
     MonteCarloExperimentSpec,
 )
 from vectorx.experiments.sweep import SweepSpec, generate_sweep_specs
+from vectorx.robustness.block_bootstrap import block_bootstrap_confidence_interval
+from vectorx.robustness.sensitivity import run_sensitivity_analysis
+from vectorx.robustness.walk_forward import generate_walk_forward_windows, run_walk_forward
 from vectorx.statistics.expectancy_comparison import (
     build_expectancy_snapshot_from_run_metrics,
 )
@@ -48,12 +59,26 @@ from vectorx.storage.postgres.repository import PostgresExperimentRepository
 
 app = FastAPI(title="VectorX API")
 
+MAX_WALK_FORWARD_WINDOWS = 100
+
 
 class ExpectancyComparisonRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     monte_carlo_experiment_id: int
     historical_experiment_id: int
+    reference_risk_fraction: float = Field(default=0.01, gt=0.0, le=1.0)
+
+
+class WalkForwardRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base: HistoricalBacktestExperimentSpec
+    start: AwareDatetime
+    end: AwareDatetime
+    train_window_days: float = Field(gt=0.0)
+    test_window_days: float = Field(gt=0.0)
+    step_days: float = Field(gt=0.0)
     reference_risk_fraction: float = Field(default=0.01, gt=0.0, le=1.0)
 
 # The Vue dashboard (web/) is served from Vite's dev server on a different
@@ -272,6 +297,68 @@ def get_analysis(
 def create_out_of_sample(spec: OutOfSampleSpec) -> dict:
     result = run_out_of_sample(spec)
     return out_of_sample_result_to_dict(result)
+
+
+@app.post("/robustness/sensitivity")
+def create_sensitivity_analysis(sweep: SweepSpec) -> dict:
+    return sensitivity_result_to_dict(run_sensitivity_analysis(sweep))
+
+
+@app.post("/robustness/walk-forward")
+def create_walk_forward(spec: WalkForwardRequest) -> dict:
+    windows = generate_walk_forward_windows(
+        spec.start,
+        spec.end,
+        train_window=timedelta(days=spec.train_window_days),
+        test_window=timedelta(days=spec.test_window_days),
+        step=timedelta(days=spec.step_days),
+    )
+    if not windows:
+        raise InvalidModelParametersError(
+            "walk-forward ranges produce no complete train/test windows"
+        )
+    if len(windows) > MAX_WALK_FORWARD_WINDOWS:
+        raise ExperimentTooLargeError(
+            f"walk-forward would generate {len(windows)} windows, exceeding the "
+            f"limit of {MAX_WALK_FORWARD_WINDOWS}"
+        )
+    results = run_walk_forward(
+        spec.base,
+        windows,
+        reference_risk_fraction=spec.reference_risk_fraction,
+    )
+    return walk_forward_result_to_dict(windows, results)
+
+
+@app.get("/experiments/{experiment_id}/robustness/block-bootstrap")
+def get_block_bootstrap(
+    experiment_id: int,
+    block_size: int = Query(gt=0),
+    seed: int = 0,
+    confidence: float = Query(default=0.95, gt=0.0, lt=1.0),
+    n_resamples: int = Query(default=2000, gt=0, le=20_000),
+    repo: PostgresExperimentRepository = Depends(get_repository),
+) -> dict:
+    result = _get_experiment_or_404(experiment_id, repo)
+    if result.run_trades is None:
+        raise AnalysisUnavailableError(
+            "experiment was not saved with storage.store_trades=true; no raw trades to analyze"
+        )
+    r_multiples = [
+        trade.r_multiple for run_trades in result.run_trades for trade in run_trades
+    ]
+    interval = block_bootstrap_confidence_interval(
+        r_multiples,
+        block_size=block_size,
+        seed=seed,
+        confidence=confidence,
+        n_resamples=n_resamples,
+    )
+    return {
+        "analysis_version": ANALYSIS_VERSION,
+        "block_size": block_size,
+        "confidence_interval": confidence_interval_to_dict(interval),
+    }
 
 
 @app.get("/experiments/{experiment_id}/export")

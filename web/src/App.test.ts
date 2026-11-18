@@ -13,6 +13,9 @@ vi.mock('./api', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
   getBatch: vi.fn(),
   runOutOfSample: vi.fn(),
+  runSensitivity: vi.fn(),
+  runWalkForward: vi.fn(),
+  getBlockBootstrap: vi.fn(),
   exportUrl: vi.fn(() => 'http://example.com/export'),
 }))
 
@@ -64,6 +67,16 @@ describe('App', () => {
     await viewSwitch.findAll('button')[0].trigger('click')
 
     expect(wrapper.findComponent({ name: 'ExperimentsList' }).exists()).toBe(true)
+  })
+
+  it('switches to the robustness view', async () => {
+    const wrapper = mount(App)
+    const viewSwitch = wrapper.get('[data-testid="view-switch"]')
+
+    await viewSwitch.findAll('button')[3].trigger('click')
+
+    expect(wrapper.findComponent({ name: 'RobustnessView' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'OutOfSampleView' }).exists()).toBe(false)
   })
 
   it('switches the interface language between English and Russian', async () => {

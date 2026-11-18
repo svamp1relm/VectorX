@@ -6,6 +6,10 @@
 # готовые значения для формы в UI в конце).
 set -euo pipefail
 
+# Локальные API-запросы не должны идти через proxy из активированного окружения.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1"
+export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -15,7 +19,7 @@ if [[ -f "$RUN_DIR/demo.env" ]]; then
   source "$RUN_DIR/demo.env"
 fi
 
-: "${VECTORX_API_PORT:=8000}"
+: "${VECTORX_API_PORT:=8001}"
 : "${VECTORX_API_BASE:=http://127.0.0.1:${VECTORX_API_PORT}}"
 export VECTORX_DATABASE_URL VECTORX_CORS_ORIGINS VECTORX_API_PORT VECTORX_WEB_PORT VITE_API_BASE VECTORX_API_BASE
 

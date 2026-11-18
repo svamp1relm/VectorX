@@ -36,6 +36,6 @@ npm run build         # production-сборка в dist/
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `VITE_API_BASE` | `http://127.0.0.1:8000` | Базовый URL FastAPI-бэкенда |
+| `VITE_API_BASE` | `http://127.0.0.1:8001` | Базовый URL FastAPI-бэкенда |
 
 См. `.env.example`. Vite подхватывает `.env.local` (игнорируется git).

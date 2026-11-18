@@ -260,3 +260,58 @@ export interface OutOfSampleResult {
     warnings: string[]
   }
 }
+
+export interface SensitivityRequest {
+  hypothesis: string
+  base: ExperimentSpec
+  grid: Record<string, unknown[]>
+}
+
+export interface SensitivityPoint {
+  params: Record<string, unknown>
+  expectancy_sample: number
+  sharpe: number | null
+}
+
+export interface SensitivityResult {
+  analysis_version: number
+  points: SensitivityPoint[]
+}
+
+export interface WalkForwardRequest {
+  base: HistoricalBacktestExperimentSpec
+  start: string
+  end: string
+  train_window_days: number
+  test_window_days: number
+  step_days: number
+  reference_risk_fraction: number
+}
+
+export interface WalkForwardWindowResult {
+  window: {
+    train_start: string
+    train_end: string
+    test_start: string
+    test_end: string
+  }
+  result: OutOfSampleResult
+}
+
+export interface WalkForwardResult {
+  analysis_version: number
+  windows: WalkForwardWindowResult[]
+}
+
+export interface BlockBootstrapRequest {
+  blockSize: number
+  seed: number
+  confidence: number
+  nResamples: number
+}
+
+export interface BlockBootstrapResult {
+  analysis_version: number
+  block_size: number
+  confidence_interval: ConfidenceInterval
+}

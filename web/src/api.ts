@@ -6,6 +6,8 @@ import type {
   BatchCreateRequest,
   BatchDetail,
   BatchSummary,
+  BlockBootstrapRequest,
+  BlockBootstrapResult,
   EquityPoint,
   ExperimentDetail,
   ExperimentSummaryItem,
@@ -13,9 +15,13 @@ import type {
   OutOfSampleRequest,
   OutOfSampleResult,
   RunResult,
+  SensitivityRequest,
+  SensitivityResult,
+  WalkForwardRequest,
+  WalkForwardResult,
 } from './types'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:8000'
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:8001'
 
 async function parseErrorDetail(response: Response): Promise<string> {
   try {
@@ -99,6 +105,29 @@ export function compareExpectancy(payload: {
 
 export function runOutOfSample(payload: OutOfSampleRequest): Promise<OutOfSampleResult> {
   return postJson<OutOfSampleResult>('/out-of-sample', payload)
+}
+
+export function runSensitivity(payload: SensitivityRequest): Promise<SensitivityResult> {
+  return postJson<SensitivityResult>('/robustness/sensitivity', payload)
+}
+
+export function runWalkForward(payload: WalkForwardRequest): Promise<WalkForwardResult> {
+  return postJson<WalkForwardResult>('/robustness/walk-forward', payload)
+}
+
+export function getBlockBootstrap(
+  id: number,
+  payload: BlockBootstrapRequest,
+): Promise<BlockBootstrapResult> {
+  const query = new URLSearchParams({
+    block_size: String(payload.blockSize),
+    seed: String(payload.seed),
+    confidence: String(payload.confidence),
+    n_resamples: String(payload.nResamples),
+  })
+  return getJson<BlockBootstrapResult>(
+    `/experiments/${id}/robustness/block-bootstrap?${query}`,
+  )
 }
 
 export function exportUrl(id: number, format: 'json' | 'markdown'): string {
