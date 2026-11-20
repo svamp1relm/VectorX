@@ -20,7 +20,7 @@ vectorx = "vectorx.cli:main"
 [project.optional-dependencies]
 postgres = [
     "sqlalchemy>=2",
-    "alembic>=1.13",
+    "alembic>=1.20.1",
     "psycopg[binary]>=3.1",
 ]
 api = [
