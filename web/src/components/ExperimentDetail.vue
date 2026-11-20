@@ -172,7 +172,7 @@ watch(() => props.id, load)
           <dt>{{ t('detail.meanFinalCapital') }}</dt>
           <dd>{{ meanFinalCapital ?? '—' }}</dd>
           <dt>{{ t('detail.totalTrades') }}</dt>
-          <dd>{{ resultsError ? '—' : totalTrades }}</dd>
+          <dd data-testid="total-trades-value">{{ resultsError ? '—' : totalTrades }}</dd>
           <dt>{{ t('detail.meanReturn') }}</dt>
           <dd>{{ detail.summary.mean_total_return }}</dd>
           <dt>{{ t('detail.medianReturn') }}</dt>

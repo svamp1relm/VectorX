@@ -5,6 +5,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from vectorx.experiments.runner import run_experiment
 from vectorx.experiments.spec import ExperimentSpec, parse_experiment_spec
 from vectorx.storage.postgres.repository import PostgresExperimentRepository
@@ -262,3 +264,65 @@ def test_summary_reads_do_not_query_raw_trades(clean_postgres_engine):
     assert summary.run_trades is None
     assert len(listed) == 1
     assert not any("trades" in statement.lower() for statement in statements)
+
+
+def test_analysis_trade_runs_read_only_gross_and_net_values(clean_postgres_engine):
+    repo = PostgresExperimentRepository(clean_postgres_engine)
+    spec = _spec(storage={"store_trades": True})
+    original = run_experiment(spec)
+    experiment_id = repo.save_experiment(original)
+
+    runs = repo.get_analysis_trade_runs(experiment_id)
+
+    assert len(runs) == len(original.run_results)
+    for actual, expected_trades in zip(runs, original.run_trades, strict=True):
+        assert len(actual) == len(expected_trades)
+        assert actual[0][0] == expected_trades[0].r_multiple
+        assert actual[0][1] == expected_trades[0].net_r_multiple
+
+
+def test_analysis_trade_runs_use_one_targeted_query(clean_postgres_engine):
+    from sqlalchemy import event
+
+    repo = PostgresExperimentRepository(clean_postgres_engine)
+    spec = _spec(storage={"store_trades": True})
+    experiment_id = repo.save_experiment(run_experiment(spec))
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(clean_postgres_engine, "before_cursor_execute", capture)
+    try:
+        repo.get_analysis_trade_runs(experiment_id)
+    finally:
+        event.remove(clean_postgres_engine, "before_cursor_execute", capture)
+
+    assert len(statements) == 1
+    assert "trades" in statements[0].lower()
+    assert "net_r_multiple" in statements[0]
+
+
+def test_raw_trade_inserts_use_bounded_chunks(clean_postgres_engine):
+    from sqlalchemy import event
+
+    import vectorx.storage.postgres.repository as repository_module
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(repository_module, "_TRADE_INSERT_CHUNK_SIZE", 2)
+    repo = PostgresExperimentRepository(clean_postgres_engine)
+    spec = _spec(runs=1, storage={"store_trades": True})
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lower().startswith("insert into trades"):
+            statements.append(statement)
+
+    event.listen(clean_postgres_engine, "before_cursor_execute", capture)
+    try:
+        repo.save_experiment(run_experiment(spec))
+    finally:
+        event.remove(clean_postgres_engine, "before_cursor_execute", capture)
+        monkeypatch.undo()
+
+    assert len(statements) == 10

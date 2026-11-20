@@ -125,3 +125,12 @@ def test_missing_file_raises_domain_error(tmp_path):
         CsvDataSource(path, symbol="BTCUSDT", timeframe="1h").load()
     with pytest.raises(InvalidMarketDataError):
         compute_data_version(path)
+
+
+def test_csv_candle_limit_is_enforced_while_reading():
+    from vectorx.core.errors import ExperimentTooLargeError
+
+    source = CsvDataSource(_FIXTURES / "sample_ohlcv.csv", symbol="BTCUSDT", timeframe="1h")
+
+    with pytest.raises(ExperimentTooLargeError):
+        source.load_with_version(max_candles=1)

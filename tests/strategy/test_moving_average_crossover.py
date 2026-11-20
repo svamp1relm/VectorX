@@ -89,3 +89,15 @@ def test_known_crossover_sequence_produces_expected_signals():
     signals = [strategy.on_candle(_candle(i, close)) for i, close in enumerate(closes)]
 
     assert signals == expected
+
+
+def test_does_not_recompute_window_sums_with_builtin_sum(monkeypatch):
+    strategy = MovingAverageCrossoverStrategy(fast_period=2, slow_period=4, stop_loss_pct=0.01)
+
+    def fail_sum(*_args, **_kwargs):
+        raise AssertionError("rolling SMA must not resum a full window")
+
+    monkeypatch.setattr("builtins.sum", fail_sum)
+    signals = [strategy.on_candle(_candle(i, 100.0 + i)) for i in range(12)]
+
+    assert len(signals) == 12

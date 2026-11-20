@@ -10,7 +10,7 @@ export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-RUN_DIR="$ROOT_DIR/.demo"
+RUN_DIR="${VECTORX_DEMO_RUN_DIR:-$ROOT_DIR/.demo}"
 mkdir -p "$RUN_DIR"
 
 : "${VECTORX_POSTGRES_PORT:=55432}"

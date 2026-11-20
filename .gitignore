@@ -14,3 +14,4 @@ node_modules/
 *.iml
 .vscode/
 .demo/
+.demo-e2e/

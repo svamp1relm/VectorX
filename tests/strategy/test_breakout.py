@@ -90,3 +90,28 @@ def test_rejects_non_positive_lookbacks():
 def test_rejects_non_positive_stop_loss_pct():
     with pytest.raises(InvalidModelParametersError):
         BreakoutStrategy(entry_lookback=3, exit_lookback=3, stop_loss_pct=0.0)
+
+
+def test_does_not_recompute_channels_with_builtin_max_or_min(monkeypatch):
+    import builtins
+
+    strategy = BreakoutStrategy(entry_lookback=3, exit_lookback=3, stop_loss_pct=0.02)
+    candles = [_candle(i, 101.0 + i, 99.0 + i, 100.0 + i) for i in range(12)]
+    calls = []
+    original_max = builtins.max
+    original_min = builtins.min
+
+    def counting_max(*args, **kwargs):
+        calls.append("max")
+        return original_max(*args, **kwargs)
+
+    def counting_min(*args, **kwargs):
+        calls.append("min")
+        return original_min(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.max", counting_max)
+    monkeypatch.setattr("builtins.min", counting_min)
+    signals = [strategy.on_candle(candle) for candle in candles]
+
+    assert len(signals) == 12
+    assert calls == []
