@@ -1,0 +1,26 @@
+name: Research question
+description: Обсудить интерпретацию или дизайн исследования
+title: '[Research]: '
+labels: [research]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Гипотеза или вопрос
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Данные, стратегия, параметры и временные диапазоны
+    validations:
+      required: true
+  - type: textarea
+    id: assumptions
+    attributes:
+      label: Execution, gross/net, OOS и statistical assumptions
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Наблюдаемый результат и provenance
+      description: Не включайте секреты или private данные.

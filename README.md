@@ -1,5 +1,9 @@
 # VectorX
 
+[![CI](https://github.com/svamp1relm/VectorX/actions/workflows/ci.yml/badge.svg)](https://github.com/svamp1relm/VectorX/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/svamp1relm/VectorX)](https://github.com/svamp1relm/VectorX/releases)
+
 Исследовательская платформа для анализа торговых стратегий. Monte Carlo модели и
 исторический бэктест (CSV + стратегии) сходятся в один контракт `Trade[]` →
 `PortfolioSimulator` → статистика. Не торговый бот — нет live-ордеров, MEXC, CCXT.
@@ -200,3 +204,11 @@ cd ..
 ```
 
 Скрипт сам поднимает изолированный PostgreSQL/API/Web, выполняет 6 сценариев и останавливает стек.
+
+## Сообщество
+
+- Лицензия: [MIT](LICENSE).
+- Изменения по релизам: [CHANGELOG.md](CHANGELOG.md).
+- Как внести вклад: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Сообщения об уязвимостях: [SECURITY.md](SECURITY.md).
+- Правила участия: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

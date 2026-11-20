@@ -1,0 +1,21 @@
+name: Feature request
+description: Предложить улучшение платформы
+title: '[Feature]: '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую исследовательскую или инженерную задачу это решает?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Влияние на численную совместимость, API и ресурсы
