@@ -116,6 +116,7 @@ def build_experiment_report(
             "python": platform.python_version(),
             "numpy": package_version("numpy"),
             "pydantic": package_version("pydantic"),
+            "vectorx": package_version("vectorx"),
         },
         "spec": result.spec.model_dump(mode="json"),
         "summary": _summary_to_dict(result.summary),

@@ -139,7 +139,6 @@ HistoricalStrategySpec = Annotated[
     | BuyAndHoldStrategySpec
     | RandomEntryStrategySpec
     | BreakoutStrategySpec,
-    Field(discriminator="type"),
     BeforeValidator(_default_strategy_type),
 ]
 """Discriminated union on `type`; every consumer type-hints against this, not a class."""
@@ -169,7 +168,6 @@ def _default_experiment_type(raw: object) -> object:
 
 ExperimentSpec = Annotated[
     MonteCarloExperimentSpec | HistoricalBacktestExperimentSpec,
-    Field(discriminator="type"),
     BeforeValidator(_default_experiment_type),
 ]
 """The type every consumer (runner, storage, API) type-hints against.
