@@ -106,7 +106,7 @@ fi
 echo "==> Запускаю web (vite dev) в фоне, лог: .demo/web.log"
 # cd + exec в одной подоболочке: сама подоболочка подменяется на setsid/npm,
 # лишнего висящего bash-процесса не остаётся; $! берётся снаружи, одним фоновым заданием.
-(cd "$ROOT_DIR/web" && exec setsid nohup npm run dev -- --host 127.0.0.1 --port "$VECTORX_WEB_PORT" --strictPort >"$RUN_DIR/web.log" 2>&1) &
+(cd "$ROOT_DIR/web" && exec setsid nohup env NO_COLOR=1 FORCE_COLOR=0 npm run dev -- --host 127.0.0.1 --port "$VECTORX_WEB_PORT" --strictPort >"$RUN_DIR/web.log" 2>&1) &
 echo $! >"$RUN_DIR/web.pid"
 disown
 
