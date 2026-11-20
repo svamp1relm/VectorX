@@ -335,3 +335,24 @@ class PostgresExperimentRepository:
                 )
                 for row in batch_rows
             )
+
+    def get_analysis_trade_runs(
+        self,
+        experiment_id: int,
+    ) -> tuple[tuple[tuple[float, float | None], ...], ...]:
+        """Read only gross/net R values, grouped and ordered by run and trade."""
+        with Session(self._engine) as session:
+            rows = session.execute(
+                select(
+                    RunRow.run_index,
+                    TradeRow.r_multiple,
+                    TradeRow.net_r_multiple,
+                )
+                .join(TradeRow, TradeRow.run_id == RunRow.id)
+                .where(RunRow.experiment_id == experiment_id)
+                .order_by(RunRow.run_index, TradeRow.trade_index)
+            ).all()
+            grouped: dict[int, list[tuple[float, float | None]]] = {}
+            for run_index, gross, net in rows:
+                grouped.setdefault(run_index, []).append((gross, net))
+            return tuple(tuple(values) for values in grouped.values())
