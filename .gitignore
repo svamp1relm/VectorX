@@ -13,3 +13,5 @@ node_modules/
 .idea/
 *.iml
 .vscode/
+.demo/
+.demo-e2e/

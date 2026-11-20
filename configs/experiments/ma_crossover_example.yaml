@@ -1,0 +1,16 @@
+name: ma_crossover_btc_1h_demo
+type: historical_backtest
+
+data:
+  path: configs/experiments/data/btc_1h_sample.csv
+  symbol: BTCUSDT
+  timeframe: 1h
+
+strategy:
+  fast_period: 10
+  slow_period: 30
+  stop_loss_pct: 0.01
+
+portfolio:
+  initial_capital: 10000
+  risk_per_trade: 0.01

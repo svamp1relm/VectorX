@@ -55,6 +55,7 @@ describe('RunsTable', () => {
     const rows = wrapper.findAll('tbody tr')
     expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('0')
+    expect(rows[0].text()).toContain('20')
     expect(rows[0].text()).toContain('0.55')
     expect(rows[0].text()).toContain('0.12')
   })
@@ -72,5 +73,15 @@ describe('RunsTable', () => {
 
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
     expect(wrapper.text()).toContain('No runs')
+  })
+
+  it('renders a historical backtest run with null expectancy_theoretical without crashing', () => {
+    const historicalResults: RunResult[] = [
+      { ...results[0], metrics: { ...results[0].metrics, expectancy_theoretical: null } },
+    ]
+
+    const wrapper = mount(RunsTable, { props: { results: historicalResults } })
+
+    expect(wrapper.findAll('tbody tr')).toHaveLength(1)
   })
 })

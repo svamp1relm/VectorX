@@ -9,10 +9,20 @@ diverges.
 
 import numpy as np
 
+from vectorx.core.errors import InvalidModelParametersError
+
+
+def _seed_sequence(experiment_seed: int, run_index: int) -> np.random.SeedSequence:
+    if experiment_seed < 0 or run_index < 0:
+        raise InvalidModelParametersError(
+            f"experiment_seed and run_index must be >= 0, got {experiment_seed}, {run_index}"
+        )
+    return np.random.SeedSequence([experiment_seed, run_index])
+
 
 def derived_rng(experiment_seed: int, run_index: int) -> np.random.Generator:
     """Build the RNG for one run of an experiment."""
-    seed_sequence = np.random.SeedSequence([experiment_seed, run_index])
+    seed_sequence = _seed_sequence(experiment_seed, run_index)
     return np.random.default_rng(seed_sequence)
 
 
@@ -22,5 +32,5 @@ def derived_seed_value(experiment_seed: int, run_index: int) -> int:
     Built from a fresh `SeedSequence` with the same entropy as `derived_rng`,
     so it never advances the state of the actual per-run generator.
     """
-    seed_sequence = np.random.SeedSequence([experiment_seed, run_index])
+    seed_sequence = _seed_sequence(experiment_seed, run_index)
     return int(seed_sequence.generate_state(1)[0])

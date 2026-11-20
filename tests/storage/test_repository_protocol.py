@@ -31,7 +31,7 @@ def test_a_conforming_class_satisfies_the_protocol():
     from vectorx.storage.repository import ExperimentRepository
 
     class FakeRepository:
-        def save_experiment(self, result) -> int:
+        def save_experiment(self, result, batch_id=None) -> int:
             return 1
 
         def get_experiment(self, experiment_id: int):
@@ -39,6 +39,18 @@ def test_a_conforming_class_satisfies_the_protocol():
 
         def list_experiment_ids(self) -> tuple[int, ...]:
             return ()
+
+        def save_batch(self, hypothesis: str, notes: str | None = None) -> int:
+            return 1
+
+        def get_batch(self, batch_id: int):
+            return None
+
+        def list_batch_ids(self) -> tuple[int, ...]:
+            return ()
+
+        def get_batch_id_for_experiment(self, experiment_id: int):
+            return None
 
     assert isinstance(FakeRepository(), ExperimentRepository)
 

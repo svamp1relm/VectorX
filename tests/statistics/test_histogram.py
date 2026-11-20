@@ -5,7 +5,6 @@ Backend computes bins; consumers (API/UI) only render `edges`/`counts`.
 
 import pytest
 
-from vectorx.core.errors import EmptyTradesError
 from vectorx.statistics.histogram import compute_histogram_bins
 
 
@@ -38,6 +37,8 @@ def test_degenerate_single_value_widens_range_by_half():
     assert sum(bins.counts) == 3
 
 
-def test_empty_values_raises_empty_trades_error():
-    with pytest.raises(EmptyTradesError):
-        compute_histogram_bins([])
+def test_empty_values_produce_explicit_empty_bins():
+    result = compute_histogram_bins([])
+
+    assert result.edges == ()
+    assert result.counts == ()

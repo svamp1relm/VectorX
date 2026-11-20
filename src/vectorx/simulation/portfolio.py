@@ -14,10 +14,11 @@ money `size` (risk_amount) — the three must not be conflated.
 """
 
 from dataclasses import dataclass, replace
+from math import isfinite
 
 import numpy as np
 
-from vectorx.core.errors import EmptyTradesError, InvalidModelParametersError
+from vectorx.core.errors import InvalidModelParametersError
 from vectorx.core.types import EquityPoint, Trade
 
 
@@ -33,6 +34,9 @@ class PortfolioResult:
 def _validate_portfolio_parameters(
     initial_capital: float, risk_per_trade: float, commission_r: float, slippage_r: float
 ) -> None:
+    values = (initial_capital, risk_per_trade, commission_r, slippage_r)
+    if not all(isfinite(value) for value in values):
+        raise InvalidModelParametersError("portfolio parameters must be finite")
     if initial_capital <= 0.0:
         raise InvalidModelParametersError(f"initial_capital must be > 0, got {initial_capital}")
     if not 0.0 < risk_per_trade <= 1.0:
@@ -60,8 +64,6 @@ def simulate_portfolio(
     trade's result is kept as-is (equity is not clamped to zero), and no
     later trades are executed or sized.
     """
-    if not trades:
-        raise EmptyTradesError("simulate_portfolio requires at least one trade")
     _validate_portfolio_parameters(initial_capital, risk_per_trade, commission_r, slippage_r)
 
     equity = initial_capital
@@ -76,8 +78,17 @@ def simulate_portfolio(
         pnl_money = risk_amount * net_r
         equity += pnl_money
 
-        sized_trades.append(replace(trade, size=risk_amount, pnl_money=pnl_money))
+        sized_trades.append(
+            replace(
+                trade,
+                size=risk_amount,
+                pnl_money=pnl_money,
+                net_r_multiple=net_r,
+            )
+        )
         peak = max(peak, equity)
+        # Not clamped to 1.0: equity is allowed to go negative on ruin (see
+        # the docstring above), so drawdown can legitimately exceed 100%.
         drawdown = (peak - equity) / peak
         equity_curve.append(
             EquityPoint(index=len(equity_curve), equity=equity, drawdown=drawdown)

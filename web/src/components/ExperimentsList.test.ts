@@ -11,6 +11,7 @@ const items: ExperimentSummaryItem[] = [
   {
     id: 1,
     name: 'baseline_expectancy',
+    spec_type: 'monte_carlo',
     seed: 42,
     runs: 100,
     status: 'completed',
@@ -43,6 +44,16 @@ describe('ExperimentsList', () => {
     const wrapper = mount(ExperimentsList)
     await flushPromises()
     await wrapper.find('[data-testid="experiment-row-1"]').trigger('click')
+
+    expect(wrapper.emitted('select')).toEqual([[1]])
+  })
+
+  it('emits select when a row is activated from the keyboard', async () => {
+    listExperiments.mockResolvedValueOnce(items)
+
+    const wrapper = mount(ExperimentsList)
+    await flushPromises()
+    await wrapper.find('[data-testid="experiment-row-1"]').trigger('keydown.enter')
 
     expect(wrapper.emitted('select')).toEqual([[1]])
   })

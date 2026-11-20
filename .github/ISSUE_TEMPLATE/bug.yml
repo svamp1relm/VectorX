@@ -1,0 +1,35 @@
+name: Bug report
+description: Сообщить о воспроизводимой ошибке
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: Ожидаемое поведение
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Фактическое поведение и ошибка
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Минимальные шаги воспроизведения
+      description: Не включайте секреты или private market data.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit / release
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Окружение
+      placeholder: Python, Node, OS, Docker, браузер

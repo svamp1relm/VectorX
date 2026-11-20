@@ -5,6 +5,7 @@ import pytest
 from vectorx.core.errors import (
     EmptyTradesError,
     ExperimentTooLargeError,
+    InvalidMarketDataError,
     InvalidModelParametersError,
     PortfolioRuinedError,
     VectorXError,
@@ -16,6 +17,7 @@ def test_domain_errors_are_vectorx_errors():
     assert issubclass(EmptyTradesError, VectorXError)
     assert issubclass(PortfolioRuinedError, VectorXError)
     assert issubclass(ExperimentTooLargeError, VectorXError)
+    assert issubclass(InvalidMarketDataError, VectorXError)
 
 
 def test_vectorx_error_is_an_exception():

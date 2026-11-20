@@ -4,11 +4,11 @@ import re
 
 from vectorx.experiments.versioning import EXPERIMENT_VERSION, get_code_version
 
-_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA_RE = re.compile(r"^[0-9a-f]{40}\+source-[0-9a-f]{16}$")
 
 
 def test_experiment_version_is_locked_to_one():
-    assert EXPERIMENT_VERSION == 1
+    assert EXPERIMENT_VERSION == 2
 
 
 def test_get_code_version_returns_sha_or_unknown():

@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  compareExpectancy,
+  getBlockBootstrap,
   getEquity,
   getExperiment,
   getResults,
   getRun,
   listExperiments,
+  runSensitivity,
+  runWalkForward,
 } from './api'
 
 function mockFetchOnce(body: unknown, ok = true, status = 200) {
@@ -77,5 +81,80 @@ describe('api client', () => {
     mockFetchOnce(null, false, 404)
 
     await expect(getExperiment(999)).rejects.toThrow('404')
+  })
+
+  it('compareExpectancy posts snake_case fields to the comparison endpoint', async () => {
+    const fetchMock = mockFetchOnce({ estimates: {} })
+
+    await compareExpectancy({
+      monteCarloExperimentId: 1,
+      historicalExperimentId: 2,
+      referenceRiskFraction: 0.01,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/comparisons\/expectancy$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          monte_carlo_experiment_id: 1,
+          historical_experiment_id: 2,
+          reference_risk_fraction: 0.01,
+        }),
+      }),
+    )
+  })
+
+  it('runSensitivity posts the sweep to the robustness endpoint', async () => {
+    const fetchMock = mockFetchOnce({ points: [] })
+    const payload = {
+      hypothesis: 'test',
+      base: { type: 'monte_carlo' },
+      grid: { seed: [1, 2] },
+    }
+
+    await runSensitivity(payload as never)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/robustness\/sensitivity$/),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }),
+    )
+  })
+
+  it('runWalkForward posts window durations to the robustness endpoint', async () => {
+    const fetchMock = mockFetchOnce({ windows: [] })
+    const payload = {
+      base: { type: 'historical_backtest' },
+      start: '2024-01-01T00:00:00+00:00',
+      end: '2025-01-01T00:00:00+00:00',
+      train_window_days: 90,
+      test_window_days: 30,
+      step_days: 30,
+      reference_risk_fraction: 0.01,
+    }
+
+    await runWalkForward(payload as never)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/robustness\/walk-forward$/),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(payload) }),
+    )
+  })
+
+  it('getBlockBootstrap maps request fields to query parameters', async () => {
+    const fetchMock = mockFetchOnce({ confidence_interval: {} })
+
+    await getBlockBootstrap(26, {
+      blockSize: 20,
+      seed: 7,
+      confidence: 0.9,
+      nResamples: 500,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /\/experiments\/26\/robustness\/block-bootstrap\?block_size=20&seed=7&confidence=0\.9&n_resamples=500&cost_basis=gross_r$/,
+      ),
+    )
   })
 })

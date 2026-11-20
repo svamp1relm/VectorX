@@ -7,7 +7,15 @@ native-float database column. `metrics_extra` carries the remaining
 """
 
 
-from vectorx.core.types import EquityPoint, ExperimentSummary, HistogramBins, Metrics
+from vectorx.core.types import (
+    EquityPoint,
+    ExpectancyComparison,
+    ExpectancyEstimate,
+    ExperimentSummary,
+    HistogramBins,
+    Metrics,
+    RiskDefinition,
+)
 from vectorx.storage.postgres.serializers import (
     equity_curve_from_json,
     equity_curve_to_json,
@@ -100,6 +108,21 @@ def test_equity_curve_round_trip():
 
 
 def test_summary_round_trip():
+    estimate = ExpectancyEstimate(
+        value=0.5,
+        canonical_value=None,
+        source="monte_carlo_sample",
+        unit="R",
+        sample_size=100_000,
+        planned_sample_size=100_000,
+        risk_definition=RiskDefinition(
+            unit="R",
+            normalization_version="r-v1",
+            method="model_r",
+            risk_unit_fraction=0.01,
+            cost_basis="gross_r",
+        ),
+    )
     summary = ExperimentSummary(
         runs=4,
         mean_total_return=0.0575,
@@ -109,6 +132,7 @@ def test_summary_round_trip():
         p_ruined=0.25,
         total_return_histogram=HistogramBins(edges=(0.0, 1.0), counts=(4,)),
         r_multiple_histogram=HistogramBins(edges=(-1.0, 2.0), counts=(2, 2)),
+        expectancy=ExpectancyComparison(sample=estimate),
     )
 
     as_json = summary_to_json(summary)
@@ -118,3 +142,22 @@ def test_summary_round_trip():
     import json
 
     json.dumps(as_json)  # must not raise
+
+
+def test_legacy_summary_without_expectancy_loads_as_none():
+    summary = ExperimentSummary(
+        runs=1,
+        mean_total_return=0.0,
+        median_total_return=0.0,
+        stdev_total_return=0.0,
+        p_negative=0.0,
+        p_ruined=0.0,
+        total_return_histogram=HistogramBins(edges=(0.0, 1.0), counts=(1,)),
+        r_multiple_histogram=HistogramBins(edges=(-1.0, 1.0), counts=(1,)),
+    )
+    as_json = summary_to_json(summary)
+    del as_json["expectancy"]
+
+    rebuilt = summary_from_json(as_json)
+
+    assert rebuilt.expectancy is None
