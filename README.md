@@ -34,6 +34,14 @@ Platform v1"**. Что уже реализовано:
 - [docs/VECTORX-CODE-REVIEW-REMEDIATION-PLAN.md](docs/VECTORX-CODE-REVIEW-REMEDIATION-PLAN.md) —
   исправления resource safety, execution, метрик, хранения, OOS, UI и security.
 
+Актуальное устройство и использование:
+
+- [docs/VECTORX-ARCHITECTURE.md](docs/VECTORX-ARCHITECTURE.md) — модули, routers, БД и тестовые уровни.
+- [docs/VECTORX-RESEARCH-MODEL.md](docs/VECTORX-RESEARCH-MODEL.md) — execution, R, gross/net, OOS и bootstrap.
+- [docs/VECTORX-API.md](docs/VECTORX-API.md) — HTTP-контракты и ошибки.
+- [docs/VECTORX-DATA-GUIDE.md](docs/VECTORX-DATA-GUIDE.md) — CSV, time ranges и data sandbox.
+- [docs/VECTORX-ACCESSIBILITY-CHECKLIST.md](docs/VECTORX-ACCESSIBILITY-CHECKLIST.md) — keyboard/charts/responsive checks.
+
 ## Что не входит
 
 MEXC, CCXT, live trading, реальные ордера, WebSocket, Redis, Kafka, Kubernetes, ML,
@@ -49,11 +57,10 @@ source .venv/bin/activate
 pip install -e ".[postgres,api,dev]"
 ```
 
-Для зафиксированного исследовательского окружения используйте `requirements-research.lock`:
+Для полностью зафиксированного исследовательского окружения используйте `uv.lock`:
 
 ```bash
-pip install -r requirements-research.lock
-pip install --no-deps -e .
+uv sync --all-extras
 ```
 
 Требуются Python 3.12+, Node.js с npm и Docker с Docker Compose.
@@ -182,3 +189,14 @@ cd web
 npm test
 npm run build
 ```
+
+Browser E2E на отдельном Docker project и отдельных портах:
+
+```bash
+cd web
+npx playwright install chromium
+cd ..
+./scripts/e2e.sh
+```
+
+Скрипт сам поднимает изолированный PostgreSQL/API/Web, выполняет 6 сценариев и останавливает стек.

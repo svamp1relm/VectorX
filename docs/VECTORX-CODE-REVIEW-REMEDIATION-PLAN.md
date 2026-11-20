@@ -24,7 +24,7 @@
 - source hash, dependency provenance и run-level export;
 - frontend error/stale-state handling, discriminated unions, keyboard/accessibility и responsive layouts;
 - PostgreSQL только на loopback и CSV sandbox через `VECTORX_DATA_ROOT`;
-- зафиксированные прямые исследовательские зависимости в `requirements-research.lock`.
+- полная фиксация прямых и транзитивных исследовательских зависимостей в `uv.lock`.
 
 Проверено: 361 backend-тест и 59 frontend-тестов, Ruff, production build, миграция
 `downgrade base → upgrade head`, реальные API/OOS/robustness сценарии. Визуальная проверка
