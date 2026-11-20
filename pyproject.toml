@@ -24,7 +24,7 @@ postgres = [
     "psycopg[binary]>=3.1",
 ]
 api = [
-    "fastapi>=0.110",
+    "fastapi>=0.163.2",
     "uvicorn[standard]>=0.29",
 ]
 dev = [
